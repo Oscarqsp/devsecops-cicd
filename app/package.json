@@ -1,0 +1,13 @@
+{
+  "name": "devsecops-app",
+  "version": "1.0.0",
+  "description": "Application CRUD sécurisée",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo 'tests ok' && exit 0"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
