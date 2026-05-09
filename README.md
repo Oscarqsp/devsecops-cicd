@@ -1,30 +1,31 @@
-# devsecops-cicd
-Pipeline CI/CD DevSecOps - Tests de sécurité intégrés et gestion des secrets
-# Pipeline CI/CD DevSecOps 🔐
+# CI/CD DevSecOps - Automatisation & Sécurité
 
-## C'est quoi ce repo ?
-Ma partie du projet DevSecOps : automatisation et sécurité.
-Le pipeline se déclenche automatiquement à chaque push et fait les scans de sécurité.
+## Objectif
+Ce repo met en place un pipeline CI/CD sécurisé pour le projet DevSecOps.
+L'idée : à chaque fois qu'on pousse du code, le pipeline se déclenche automatiquement,
+scanne les vulnérabilités, et déploie l'application sur le serveur AWS si tout est ok.
 
-## Lien du repo
-https://github.com/Oscarqsp/devsecops-cicd
+## Comment ça marche
+1. Un développeur push du code sur la branche `main`
+2. GitHub Actions déclenche automatiquement le pipeline
+3. Le pipeline scanne les dépendances Node.js (npm audit)
+4. Le pipeline scanne l'image Docker à la recherche de vulnérabilités (Trivy)
+5. Si tout est ok → déploiement automatique sur l'EC2 AWS en SSH
 
-## Ce qui est en place
-- Pipeline GitHub Actions (CI/CD)
-- Scan des dépendances npm (npm audit)
-- Scan de l'image Docker (Trivy)
-- Gestion des secrets chiffrés (EC2_HOST, EC2_USER, EC2_SSH_KEY)
-- Job de déploiement automatique sur l'EC2 (en attente de la clé SSH)
+## Sécurité des secrets
+Aucune IP, mot de passe ou clé SSH n'est écrit dans le code.
+Tout est stocké dans les GitHub Secrets (chiffrés et masqués) :
+- `EC2_HOST` : adresse du serveur
+- `EC2_USER` : utilisateur SSH
+- `EC2_SSH_KEY` : clé privée SSH ( en attente )
 
-## Ce qu'il me manque
-- La clé SSH `.pem` pour activer le déploiement automatique sur l'EC2
-→ **B ou A : envoyez-moi le fichier .pem**
+## Stack utilisée
+- GitHub Actions (CI/CD)
+- Docker (conteneurisation)
+- Trivy (scan de vulnérabilités)
+- npm audit (scan des dépendances)
+- AWS EC2 (serveur de déploiement)
 
-## Ce que j'attends de l'équipe
-- **E** : le lien GitHub de l'app CRUD pour brancher le pipeline dessus
-- **B / A** : la clé SSH `.pem` pour finaliser le déploiement
-
-## Comment voir le pipeline tourner
-1. Aller dans l'onglet **Actions** du repo
-2. Cliquer sur le dernier run
-3. Voir les logs des scans de sécurité en temps réel
+## En attente
+- Clé SSH `.pem` → B/A EC2_SSH_KEY
+- Code source de l'app CRUD → E
