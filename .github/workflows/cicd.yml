@@ -32,3 +32,27 @@ jobs:
           format: table
           exit-code: 0
           severity: HIGH,CRITICAL
+
+  deploy:
+    name: Déploiement EC2
+    runs-on: ubuntu-latest
+    needs: security-scan
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Récupération du code
+        uses: actions/checkout@v3
+
+      - name: Déploiement via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ubuntu
+            git clone https://github.com/Oscarqsp/devsecops-cicd.git || git -C devsecops-cicd pull
+            docker stop devsecops-app || true
+            docker rm devsecops-app || true
+            docker build -t devsecops-app:latest ./devsecops-cicd/app
+            docker run -d --name devsecops-app -p 3000:3000 devsecops-app:latest
+            echo "Déployé avec succès"
