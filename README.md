@@ -18,7 +18,7 @@ la stack applicative sur AWS.
 ## Gestion des secrets
 
 Aucune donnée sensible n'est écrite dans le code.
-Tout est stocké dans les **GitHub Secrets** (chiffrés et masqués dans les logs) :
+Tout est stocké dans les **GitHub Secrets** (chiffrés et masqués dans les logs):
 
 | Secret | Rôle |
 |---|---|
