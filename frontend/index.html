@@ -1186,6 +1186,13 @@
         transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
         visibility 0s linear 0s;
     }
+
+    .toast.toast--error {
+      color: #fffefc;
+      background: rgba(196, 45, 35, 0.96);
+      border-color: rgba(255, 200, 198, 0.35);
+      box-shadow: 0 8px 36px rgba(180, 30, 20, 0.22);
+    }
   </style>
 </head>
 <body>
@@ -1360,6 +1367,36 @@
     let lastItems = [];
     let editingId = null;
     let toastTimer = null;
+    const FETCH_TIMEOUT_MS = 25000;
+
+    function parseApiErrorPayload(text, status) {
+      if (text && String(text).trim()) {
+        try {
+          const j = JSON.parse(text);
+          if (j && typeof j.error === "string" && j.error.trim()) return j.error.trim();
+        } catch (_) {}
+      }
+      if (typeof status === "number" && status >= 400) return "Erreur " + status;
+      return "Une erreur s’est produite.";
+    }
+
+    function networkFailureMessage(err) {
+      if (err && err.name === "AbortError") {
+        return "Délai dépassé ou réseau indisponible. Réessayez.";
+      }
+      return "Connexion ou serveur inaccessible. Réessayez.";
+    }
+
+    async function fetchWithTimeout(url, fetchOpts = {}, ms = FETCH_TIMEOUT_MS) {
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), ms);
+      try {
+        return await fetch(url, { ...fetchOpts, signal: ctrl.signal });
+      } finally {
+        clearTimeout(tid);
+      }
+    }
+
     let initialItemsLoaded = false;
     let taskNameFilterRaw = "";
     let taskFilterDebounceTimer = null;
@@ -1493,23 +1530,31 @@
       return rows.join("");
     }
 
-    function showToast(message) {
+    function showToast(message, opts) {
       const el = document.getElementById("toast");
       if (!el || !message) return;
+      const isErr = !!(opts && opts.kind === "error");
       el.textContent = message;
+      el.classList.toggle("toast--error", isErr);
+      el.setAttribute("role", isErr ? "alert" : "status");
+      el.setAttribute("aria-live", isErr ? "assertive" : "polite");
       el.setAttribute("aria-hidden", "false");
       clearTimeout(toastTimer);
       el.classList.remove("toast--visible");
       requestAnimationFrame(() => {
         requestAnimationFrame(() => el.classList.add("toast--visible"));
       });
+      const dismissMs = isErr ? 4200 : 2600;
       toastTimer = setTimeout(() => {
         el.classList.remove("toast--visible");
         toastTimer = setTimeout(() => {
           el.textContent = "";
+          el.classList.remove("toast--error");
+          el.setAttribute("role", "status");
+          el.setAttribute("aria-live", "polite");
           el.setAttribute("aria-hidden", "true");
         }, 280);
-      }, 2600);
+      }, dismissMs);
     }
 
     function todayLocalISODate() {
@@ -1841,6 +1886,7 @@
         renderItems(list);
         initialItemsLoaded = true;
         setListPanelBusy(false);
+        return true;
       } catch (err) {
         dbgErr("loadItems failed", err);
         lastItems = [];
@@ -1851,7 +1897,9 @@
         updateListDeadlineHint([], 0);
         document.getElementById("items-list").innerHTML =
           '<li class="empty">Chargement impossible</li>';
+        return false;
       }
+      return true;
     }
 
     document.getElementById("items-list").addEventListener("click", async (e) => {
@@ -1921,7 +1969,7 @@
       const saveBtn = form.closest(".item")?.querySelector(".btn-primary.btn-compact");
       if (saveBtn) saveBtn.disabled = true;
       try {
-        const r = await fetch(api("/items/" + encodeURIComponent(id)), {
+        const r = await fetchWithTimeout(api("/items/" + encodeURIComponent(id)), {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name, due_date }),
@@ -1929,37 +1977,66 @@
         });
         const text = await r.text();
         dbg("patch response", { status: r.status, body: text.slice(0, 200) });
-        if (!r.ok) throw new Error("patch failed " + r.status);
+        if (!r.ok) {
+          showToast(parseApiErrorPayload(text, r.status), { kind: "error" });
+          if (saveBtn) saveBtn.disabled = false;
+          return;
+        }
         editingId = null;
-        await loadItems();
-        showToast("Tâche mise à jour");
+        const listOk = await loadItems();
+        if (!listOk) {
+          showToast(
+            "Enregistrement effectué, mais impossible d’actualiser la liste. Actualisez la page.",
+            { kind: "error" }
+          );
+        } else {
+          showToast("Tâche mise à jour");
+        }
       } catch (err) {
         dbgErr("patch error", err);
+        showToast(networkFailureMessage(err), { kind: "error" });
         if (saveBtn) saveBtn.disabled = false;
       }
     });
 
     document.getElementById("add-form").addEventListener("submit", async (e) => {
       e.preventDefault();
+      const form = e.target;
+      const submitBtn = form.querySelector('button[type="submit"]');
       const input = document.getElementById("name");
       const dueEl = document.getElementById("due_date");
       const name = input.value.trim();
       const due_date = dueEl ? dueEl.value.trim() : "";
       if (!name || !due_date) return;
+      if (submitBtn) submitBtn.disabled = true;
       try {
-        const postRes = await fetch(api("/items"), {
+        const postRes = await fetchWithTimeout(api("/items"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name, due_date }),
           cache: "no-store",
         });
-        if (!postRes.ok) return;
-        input.value = "";
-        if (dueEl) dueEl.value = todayLocalISODate();
-        await loadItems();
-        showToast("Tâche ajoutée");
-      } catch {
-        /* ignore */
+        const postText = await postRes.text();
+        if (!postRes.ok) {
+          showToast(parseApiErrorPayload(postText, postRes.status), { kind: "error" });
+          return;
+        }
+        const listOk = await loadItems();
+        if (listOk) {
+          input.value = "";
+          if (dueEl) dueEl.value = todayLocalISODate();
+          showToast("Tâche ajoutée");
+        } else {
+          showToast(
+            "Tâche enregistrée, mais impossible d’actualiser la liste. Actualisez la page.",
+            { kind: "error" }
+          );
+        }
+      } catch (err) {
+        dbgErr("add-form submit", err);
+        showToast(networkFailureMessage(err), { kind: "error" });
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
       }
     });
 
