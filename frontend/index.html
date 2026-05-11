@@ -500,6 +500,21 @@
       flex-shrink: 0;
     }
 
+    .list-deadline-hint {
+      margin: -2px clamp(14px, 2vw, 18px) 6px;
+      padding: 0 3px;
+      font-size: 0.6875rem;
+      font-weight: 500;
+      color: var(--muted);
+      line-height: 1.42;
+      letter-spacing: -0.01em;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .list-deadline-hint[hidden] {
+      display: none !important;
+    }
+
     .list-toolbar .list-search {
       flex: 1 1 140px;
       width: auto;
@@ -1108,6 +1123,13 @@
             <option value="created">Date de création</option>
           </select>
         </div>
+        <p
+          class="list-deadline-hint"
+          id="list-deadline-hint"
+          hidden
+          aria-live="polite"
+          aria-relevant="text"
+        ></p>
         <div class="list-scroll">
           <ul class="items" id="items-list"></ul>
         </div>
@@ -1270,6 +1292,12 @@
     function setListPanelBusy(busy) {
       const panel = document.getElementById("list-panel");
       if (panel) panel.setAttribute("aria-busy", busy ? "true" : "false");
+      const hint = document.getElementById("list-deadline-hint");
+      if (hint && busy) {
+        hint.hidden = true;
+        hint.textContent = "";
+        hint.removeAttribute("aria-label");
+      }
     }
 
     function skeletonListHtml(rowCount) {
@@ -1401,6 +1429,33 @@
       if (wk) wk.textContent = String(s.dueLaterThisWeek);
     }
 
+    /** Résumé échéances pour le périmètre affiché (liste entière ou filtrée uniquement). */
+    function updateListDeadlineHint(rowsInScope, totalInScope) {
+      const hint = document.getElementById("list-deadline-hint");
+      if (!hint) return;
+      const n =
+        typeof totalInScope === "number"
+          ? totalInScope
+          : Array.isArray(rowsInScope)
+            ? rowsInScope.length
+            : 0;
+      if (!n) {
+        hint.textContent = "";
+        hint.hidden = true;
+        hint.removeAttribute("aria-label");
+        return;
+      }
+      const s = taskDeadlineStatCounts(rowsInScope);
+      const cetteSemaine = s.dueToday + s.dueLaterThisWeek;
+      const slice = `${s.overdue} en retard · ${cetteSemaine} cette semaine · ${n} au total`;
+      hint.hidden = false;
+      hint.textContent = slice;
+      const filtered = nameFilterNormalized() !== "";
+      hint.setAttribute(
+        "aria-label",
+        (filtered ? "Sur les tâches filtrées · " : "Sur toutes les tâches · ") + slice
+      );
+    }
     /** Jalons à partir de la date locale du jour civil. */
     function dueDateToneClass(row) {
       const iso = toInputDateValue(row);
@@ -1462,12 +1517,14 @@
         editingId = null;
         ul.innerHTML =
           '<li class="empty" role="status">Créez votre première tâche 🚀</li>';
+        updateListDeadlineHint([], 0);
         return;
       }
       if (!filtered.length) {
         editingId = null;
         ul.innerHTML =
           '<li class="empty" role="status">Aucune tâche ne correspond à votre recherche</li>';
+        updateListDeadlineHint([], 0);
         return;
       }
       const idNum = (x) => Number(x);
@@ -1572,6 +1629,8 @@
         ul.appendChild(li);
       }
 
+      updateListDeadlineHint(filtered, filtered.length);
+
       const formEditing = ul.querySelector(".item-edit-form");
       if (formEditing) {
         const input = formEditing.querySelector('input[name="name"]');
@@ -1617,6 +1676,7 @@
         setTotalsAndCaption(0, 0);
         initialItemsLoaded = true;
         setListPanelBusy(false);
+        updateListDeadlineHint([], 0);
         document.getElementById("items-list").innerHTML =
           '<li class="empty">Chargement impossible</li>';
       }
