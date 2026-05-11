@@ -13,21 +13,26 @@ jobs:
     steps:
       - name: Récupération du code
         uses: actions/checkout@v4
+
       - name: Installation des dépendances
         working-directory: ./app
         run: npm install
+
       - name: Audit sécurité des dépendances npm
         working-directory: ./app
         run: npm audit --audit-level=high || true
+
       - name: Build image Docker
         run: docker build -t devsecops-app:latest ./app
+
       - name: Scan de vulnérabilités Trivy
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: devsecops-app:latest
           format: table
-          exit-code: 0
-          severity: HIGH,CRITICAL
+          exit-code: 1
+          ignore-unfixed: true
+          severity: CRITICAL
 
   docker-compose-test:
     name: Test Docker Compose
@@ -36,13 +41,16 @@ jobs:
     steps:
       - name: Récupération du code
         uses: actions/checkout@v4
+
       - name: Lancement de la stack Docker Compose
         run: docker compose up -d
+
       - name: Vérification des conteneurs
         run: |
           sleep 10
           docker compose ps
           docker ps
+
       - name: Arrêt de la stack
         run: docker compose down
 
@@ -58,6 +66,7 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
+
       - name: Stop EC2 instance
         run: |
           aws ec2 stop-instances --instance-ids ${{ secrets.INSTANCE_ID }}
@@ -75,6 +84,7 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
+
       - name: Start EC2 instance
         run: |
           aws ec2 start-instances --instance-ids ${{ secrets.INSTANCE_ID }}
@@ -89,6 +99,7 @@ jobs:
     steps:
       - name: Récupération du code
         uses: actions/checkout@v4
+
       - name: Déploiement via SSH
         uses: appleboy/ssh-action@master
         with:
