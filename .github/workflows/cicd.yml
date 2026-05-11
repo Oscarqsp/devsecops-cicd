@@ -13,18 +13,14 @@ jobs:
     steps:
       - name: Récupération du code
         uses: actions/checkout@v4
-
       - name: Installation des dépendances
         working-directory: ./app
         run: npm install
-
       - name: Audit sécurité des dépendances npm
         working-directory: ./app
         run: npm audit --audit-level=high || true
-
       - name: Build image Docker
         run: docker build -t devsecops-app:latest ./app
-
       - name: Scan de vulnérabilités Trivy
         uses: aquasecurity/trivy-action@master
         with:
@@ -40,16 +36,13 @@ jobs:
     steps:
       - name: Récupération du code
         uses: actions/checkout@v4
-
       - name: Lancement de la stack Docker Compose
         run: docker compose up -d
-
       - name: Vérification des conteneurs
         run: |
           sleep 10
           docker compose ps
           docker ps
-
       - name: Arrêt de la stack
         run: docker compose down
 
@@ -65,7 +58,6 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-
       - name: Stop EC2 instance
         run: |
           aws ec2 stop-instances --instance-ids ${{ secrets.INSTANCE_ID }}
@@ -83,7 +75,6 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-
       - name: Start EC2 instance
         run: |
           aws ec2 start-instances --instance-ids ${{ secrets.INSTANCE_ID }}
@@ -98,13 +89,15 @@ jobs:
     steps:
       - name: Récupération du code
         uses: actions/checkout@v4
-
       - name: Déploiement via SSH
         uses: appleboy/ssh-action@master
+        env:
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          envs: MISTRAL_API_KEY
           script: |
             if ! command -v git &> /dev/null; then
               sudo apt install git -y
@@ -119,6 +112,7 @@ jobs:
             cd /home/ubuntu
             git clone https://github.com/Oscarqsp/devsecops-cicd.git
             cd devsecops-cicd
+            echo "MISTRAL_API_KEY=$MISTRAL_API_KEY" > .env
             sudo docker compose down || true
             sudo docker compose up -d
             sudo docker compose ps
