@@ -248,7 +248,7 @@
     }
 
     .form input[type="text"]::placeholder {
-      color: #aeaeb2;
+      color: #767676;
     }
 
     .form input[type="text"]:focus-visible {
@@ -326,6 +326,19 @@
 
     .btn-primary:hover {
       background: var(--accent-hover);
+    }
+
+    #add-form:invalid .form-actions .btn-primary {
+      background: #a8a8ad;
+      color: rgba(255, 255, 255, 0.94);
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    #add-form:invalid .form-actions .btn-primary:hover,
+    #add-form:invalid .form-actions .btn-primary:active {
+      background: #a8a8ad;
+      transform: none;
     }
 
     .btn-ghost {
