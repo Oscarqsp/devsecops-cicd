@@ -374,13 +374,19 @@
       font-variant-numeric: tabular-nums;
     }
 
-    .list-search-wrap {
+    .list-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: stretch;
+      gap: 8px;
       padding: 2px clamp(14px, 2vw, 18px) 10px;
       flex-shrink: 0;
     }
 
-    .list-search {
-      width: 100%;
+    .list-toolbar .list-search {
+      flex: 1 1 140px;
+      width: auto;
+      min-width: min(100%, 120px);
       padding: 0.45rem 0.75rem;
       font-size: 0.875rem;
       border: 1px solid var(--stroke);
@@ -390,6 +396,27 @@
       outline: none;
       font-family: inherit;
       transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .list-sort-select {
+      flex: 0 0 auto;
+      min-width: 9rem;
+      padding: 0.42rem 0.65rem;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      border: 1px solid var(--stroke);
+      border-radius: 10px;
+      background: var(--surface2);
+      color: var(--text);
+      outline: none;
+      font-family: inherit;
+      cursor: pointer;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .list-sort-select:focus-visible {
+      border-color: rgba(0, 113, 227, 0.52);
+      box-shadow: var(--focus-ring);
     }
 
     .list-search:focus-visible {
@@ -817,7 +844,7 @@
           <h2>Tâches</h2>
           <span class="count" id="list-count-note"></span>
         </div>
-        <div class="list-search-wrap">
+        <div class="list-toolbar">
           <label class="sr-only" for="task-filter">Filtrer les tâches par nom</label>
           <input
             type="search"
@@ -826,6 +853,12 @@
             autocomplete="off"
             placeholder="Filtrer par nom…"
           />
+          <label class="sr-only" for="task-sort">Trier les tâches</label>
+          <select id="task-sort" class="list-sort-select">
+            <option value="due">Échéance</option>
+            <option value="name">Nom</option>
+            <option value="created">Date de création</option>
+          </select>
         </div>
         <div class="list-scroll">
           <ul class="items" id="items-list"></ul>
@@ -858,6 +891,48 @@
     let taskNameFilterRaw = "";
     let taskFilterDebounceTimer = null;
     const TASK_FILTER_DEBOUNCE_MS = 200;
+    let taskSortMode = "due";
+
+    function createdAtComparable(row) {
+      const v = row && row.created_at;
+      if (v == null || v === "") return 0;
+      const t = new Date(v).getTime();
+      return Number.isFinite(t) ? t : 0;
+    }
+
+    function stableIdCompare(a, b) {
+      return Number(a.id) - Number(b.id);
+    }
+
+    /** Copie triée uniquement pour l’affichage ; ne modifie pas lastItems brut. */
+    function sortTasksCopy(items) {
+      const list = items.slice();
+      if (taskSortMode === "name") {
+        list.sort(
+          (a, b) =>
+            String(a.name || "").localeCompare(String(b.name || ""), "fr", {
+              sensitivity: "base",
+            }) || stableIdCompare(a, b)
+        );
+        return list;
+      }
+      if (taskSortMode === "created") {
+        list.sort(
+          (a, b) =>
+            createdAtComparable(b) -
+              createdAtComparable(a) ||
+            stableIdCompare(a, b)
+        );
+        return list;
+      }
+      list.sort((a, b) => {
+        const da = toInputDateValue(a) || "";
+        const db = toInputDateValue(b) || "";
+        const c = da.localeCompare(db);
+        return c !== 0 ? c : stableIdCompare(a, b);
+      });
+      return list;
+    }
 
     function nameFilterNormalized() {
       return String(taskNameFilterRaw || "").trim().toLowerCase();
@@ -1023,13 +1098,15 @@
 
     function renderItems(items) {
       lastItems = items;
+      const sorted = sortTasksCopy(items);
       const needle = nameFilterNormalized();
-      const filtered = filterItemsByName(items, needle);
+      const filtered = filterItemsByName(sorted, needle);
       setTotalsAndCaption(items.length, filtered.length);
       dbg("renderItems", {
         count: items.length,
         filtered: filtered.length,
-        ids: items.map((it) => it.id),
+        sort: taskSortMode,
+        ids: sorted.map((it) => it.id),
         editingId,
         rawSample: items[0],
       });
@@ -1350,6 +1427,11 @@
       if (editingId === null) return;
       e.preventDefault();
       editingId = null;
+      renderItems(lastItems);
+    });
+
+    document.getElementById("task-sort").addEventListener("change", (e) => {
+      taskSortMode = String(e.target.value || "due");
       renderItems(lastItems);
     });
 
