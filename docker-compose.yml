@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  frontend:
+    image: nginx:alpine
+    container_name: frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  backend:
+    image: node:18-alpine
+    container_name: backend
+    working_dir: /app
+    volumes:
+      - ./app:/app
+    command: sh -c "npm install && node index.js"
+    ports:
+      - "3000:3000"
+    environment:
+      - DB_HOST=database
+      - DB_USER=${{ secrets.DB_USER }}
+      - DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+      - DB_NAME=devsecops_db
+    depends_on:
+      - database
+    restart: unless-stopped
+
+  database:
+    image: mariadb:10.11
+    container_name: database
+    environment:
+      - MYSQL_ROOT_PASSWORD=${{ secrets.DB_PASSWORD }}
+      - MYSQL_DATABASE=devsecops_db
+      - MYSQL_USER=appuser
+      - MYSQL_PASSWORD=${{ secrets.DB_PASSWORD }}
+    volumes:
+      - db_data:/var/lib/mysql
+    restart: unless-stopped
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    ports:
+      - "9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  portainer_data:
