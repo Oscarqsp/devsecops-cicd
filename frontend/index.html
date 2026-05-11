@@ -698,7 +698,8 @@
       ul.innerHTML = "";
       if (!items.length) {
         editingId = null;
-        ul.innerHTML = '<li class="empty">Aucune tâche</li>';
+        ul.innerHTML =
+          '<li class="empty" role="status">Créez votre première tâche 🚀</li>';
         return;
       }
       const idNum = (x) => Number(x);
@@ -985,6 +986,14 @@
       } finally {
         btn.disabled = false;
       }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      if (editingId === null) return;
+      e.preventDefault();
+      editingId = null;
+      renderItems(lastItems);
     });
 
     document.getElementById("due_date").value = todayLocalISODate();
