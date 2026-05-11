@@ -675,6 +675,30 @@
       list-style: none;
     }
 
+    /* Glissé gauche (mobile) — transform sur .item-main uniquement */
+    li.item:not(.empty):not(.item-skel) > .item-main {
+      transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.25, 1);
+      will-change: transform;
+      touch-action: pan-y pinch-zoom;
+    }
+
+    li.item.item-swipe-nodrag > .item-main {
+      transition: none;
+      will-change: auto;
+      transform: translateX(var(--swipe-tx, 0px)) !important;
+    }
+
+    li.item:not(.empty):not(.item-skel)[data-swipe-reset] > .item-main {
+      transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.25, 1);
+      transform: translateX(0) !important;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      li.item:not(.empty):not(.item-skel) > .item-main {
+        transition: none;
+      }
+    }
+
     .item {
       display: flex;
       align-items: center;
@@ -683,6 +707,88 @@
       padding: 0.55rem 0;
       border-bottom: 1px solid var(--stroke);
       font-size: 0.9375rem;
+      position: relative;
+    }
+
+    /* Pull-to-refresh (indicateur léger en haut de la liste) */
+    .list-scroll-pull-wrap {
+      position: relative;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .pull-refresh-hint {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      margin: -4px 0 4px;
+      padding: 4px clamp(14px, 2vw, 18px);
+      font-size: 0.6875rem;
+      font-weight: 500;
+      text-align: center;
+      color: var(--muted);
+      background: linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.62) 0%,
+        rgba(255, 255, 255, 0) 100%
+      );
+      pointer-events: none;
+      min-height: 0;
+      transition: opacity 0.2s ease, max-height 0.2s ease;
+      opacity: 0;
+      max-height: 0;
+      overflow: hidden;
+    }
+
+    .pull-refresh-hint.pull-refresh-visible {
+      opacity: 1;
+      max-height: 2.75rem;
+    }
+
+    .list-pagination {
+      display: flex;
+      flex-shrink: 0;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(10px, 3vw, 16px);
+      padding: 8px clamp(14px, 2vw, 18px) 6px;
+      flex-wrap: wrap;
+      border-top: 1px solid rgba(0, 0, 0, 0.06);
+      background: rgba(255, 255, 255, 0.25);
+      margin-inline: clamp(-14px, -2vw, -18px);
+    }
+
+    .list-pagination[hidden] {
+      display: none !important;
+    }
+
+    button.list-page-btn {
+      padding: 0.34rem 0.82rem;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.7);
+      color: var(--text);
+      border: 1px solid rgba(0, 0, 0, 0.085);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+
+    button.list-page-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    .list-page-indicator {
+      font-size: 0.75rem;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    div.list-pagination {
+      border-radius: 0 0 var(--radius) var(--radius);
     }
 
     .item:last-child {
@@ -956,7 +1062,7 @@
       margin-bottom: 4px;
     }
 
-    body.list-density-compact #list-panel .list-scroll {
+    body.list-density-compact #list-panel .list-scroll-pull-wrap .list-scroll {
       padding-top: 2px;
       padding-bottom: clamp(8px, 1.4vh, 12px);
     }
@@ -1327,7 +1433,9 @@
             class="list-search"
             autocomplete="off"
             placeholder="Filtrer par nom…"
+            aria-describedby="task-filter-desc"
           />
+          <span id="task-filter-desc" class="sr-only"></span>
           <label class="sr-only" for="task-sort">Trier les tâches</label>
           <select id="task-sort" class="list-sort-select">
             <option value="due">Échéance</option>
@@ -1354,8 +1462,25 @@
           aria-live="polite"
           aria-relevant="text"
         ></p>
-        <div class="list-scroll">
-          <ul class="items" id="items-list"></ul>
+        <div class="list-scroll-pull-wrap">
+          <div
+            id="pull-refresh-hint"
+            class="pull-refresh-hint"
+            aria-live="polite"
+            aria-atomic="true"
+          ></div>
+          <div class="list-scroll" id="list-scroll">
+            <ul class="items" id="items-list"></ul>
+            <nav class="list-pagination" id="list-pagination" aria-label="Pagination des tâches" hidden>
+              <button type="button" class="list-page-btn" id="list-page-prev">
+                Page précédente
+              </button>
+              <span class="list-page-indicator" id="list-page-indicator" aria-live="polite"></span>
+              <button type="button" class="list-page-btn" id="list-page-next">
+                Page suivante
+              </button>
+            </nav>
+          </div>
         </div>
       </section>
 
@@ -1526,6 +1651,175 @@
     const TASK_FILTER_DEBOUNCE_MS = 200;
     let taskSortMode = "due";
     const LIST_DENSITY_STORAGE_KEY = "devsecops_list_density";
+    const LIST_PAGINATION_THRESHOLD = 100;
+    const LIST_PAGE_SIZE = 50;
+    let listPageIndex = 0;
+    let swipeGesture = null;
+
+    /** Glissé gauche : seuil tactile / stylet (le bouton Supprimer reste l’accès canonique). */
+    const SWIPE_DELETE_THRESHOLD_PX = 92;
+    const SWIPE_TAP_SLOP = 14;
+    const SWIPE_MAX_DRAG_X = 160;
+    const PULL_REFRESH_MIN_DY = 96;
+
+    function cleanupSwipeListeners() {
+      window.removeEventListener("pointermove", onSwipePointerMove, { passive: false });
+      window.removeEventListener("pointerup", onSwipeGestureEnd, true);
+      window.removeEventListener("pointercancel", onSwipeGestureEnd, true);
+      swipeGesture = null;
+    }
+
+    function onSwipePointerMove(e) {
+      if (!swipeGesture || e.pointerId !== swipeGesture.pointerId) return;
+      const g = swipeGesture;
+      const dx = e.clientX - g.x0;
+      const dy = e.clientY - g.y0;
+      const li = g.li;
+      if (!li || !document.body.contains(li)) {
+        cleanupSwipeListeners();
+        clearRowSwipe(li);
+        return;
+      }
+      if (!g.axisLocked) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_TAP_SLOP) return;
+        if (Math.abs(dy) >= Math.abs(dx)) {
+          cleanupSwipeListeners();
+          clearRowSwipe(li);
+          return;
+        }
+        g.axisLocked = true;
+        li.classList.add("item-swipe-nodrag");
+        li.style.setProperty("--swipe-tx", "0px");
+      }
+      e.preventDefault();
+      const capped = Math.max(Math.min(dx, 0), -SWIPE_MAX_DRAG_X);
+      g.dxLast = capped;
+      li.style.setProperty("--swipe-tx", capped + "px");
+    }
+
+    function onSwipeGestureEnd(e) {
+      if (!swipeGesture || e.pointerId !== swipeGesture.pointerId) return;
+      const g = swipeGesture;
+      const li = g.li;
+      cleanupSwipeListeners();
+
+      const shouldDelete =
+        g.axisLocked &&
+        swipeDeleteEnvironmentEnabled() &&
+        typeof g.dxLast === "number" &&
+        g.dxLast <= -SWIPE_DELETE_THRESHOLD_PX;
+
+      if (shouldDelete && li && document.body.contains(li)) {
+        const btn = li.querySelector(".btn-delete");
+        clearRowSwipe(li);
+        void runDeleteUsingButton(btn);
+        return;
+      }
+
+      if (li && document.body.contains(li)) {
+        li.setAttribute("data-swipe-reset", "1");
+        li.classList.remove("item-swipe-nodrag");
+        li.style.removeProperty("--swipe-tx");
+        requestAnimationFrame(() => li.removeAttribute("data-swipe-reset"));
+      }
+    }
+
+    function swipeDeleteEnvironmentEnabled() {
+      try {
+        return (
+          window.matchMedia("(max-width: 720px)").matches ||
+          window.matchMedia("(pointer: coarse)").matches
+        );
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function clearRowSwipe(li) {
+      if (!li) return;
+      li.classList.remove("item-swipe-nodrag");
+      li.removeAttribute("data-swipe-reset");
+      li.style.removeProperty("--swipe-tx");
+    }
+
+    function updateTaskFilterAriaDesc(filteredLen, totalStored, paging) {
+      const el = document.getElementById("task-filter-desc");
+      if (!el) return;
+      const needleRaw = String(taskNameFilterRaw || "").trim();
+      const parts = [];
+      parts.push(
+        "Filtre par sous-chaîne du libellé. Combine avec le menu de tri ci-contre pour affiner la liste."
+      );
+      if (needleRaw) {
+        const safe =
+          needleRaw.length > 80 ? needleRaw.slice(0, 80).trimEnd() + "…" : needleRaw;
+        parts.push(
+          "Filtre actif · « " +
+            safe +
+            " » · " +
+            filteredLen +
+            " résultat(s) parmi les " +
+            totalStored +
+            " tâches stockées localement après chargement serveur."
+        );
+      } else {
+        parts.push(
+          "Champ recherche vide · " +
+            filteredLen +
+            " tâche(s) incluses après tri (filtre nominatif sans critère)."
+        );
+      }
+      if (paging && paging.pages > 1) {
+        parts.push(
+          "Liste paginée · page " +
+            (listPageIndex + 1) +
+            " sur " +
+            paging.pages +
+            ", " +
+            paging.pageSize +
+            " lignes maximum par page · " +
+            paging.displayLength +
+            " ligne(s) visibles dans cette page."
+        );
+      }
+      parts.push(
+        "Gestuelle facultative · sur téléphone vous pouvez glisser une ligne vers la gauche pour supprimer. Le bouton Supprimer dans chaque ligne reste disponible pour les utilisateurs avec lecteurs d’écran et pointeur fin."
+      );
+      el.textContent = parts.join(" ");
+    }
+
+    function decorateListAria(ulEl, filteredLen, displayLen, paging) {
+      if (!ulEl) return;
+      ulEl.setAttribute("role", "list");
+      const needle = nameFilterNormalized();
+      let label = "Liste de tâches. ";
+      label += filteredLen + " résultat(s) après filtre";
+      label += needle ? " · recherche · « " + needle + " »." : ".";
+      label += " " + displayLen + " ligne(s) montrent ce panneau.";
+      if (paging && paging.pages > 1) {
+        label += " Pagination · page " + (listPageIndex + 1) + " sur " + paging.pages + ".";
+      }
+      ulEl.setAttribute("aria-label", label);
+    }
+
+    function syncListPaginationUi(filteredLen, pagingMeta) {
+      const nav = document.getElementById("list-pagination");
+      const prev = document.getElementById("list-page-prev");
+      const next = document.getElementById("list-page-next");
+      const ind = document.getElementById("list-page-indicator");
+      if (!nav || !prev || !next || !ind) return;
+      if (!pagingMeta || pagingMeta.pages <= 1) {
+        nav.hidden = true;
+        return;
+      }
+      nav.hidden = false;
+      prev.disabled = listPageIndex <= 0;
+      next.disabled = listPageIndex >= pagingMeta.pages - 1;
+      const from = listPageIndex * pagingMeta.pageSize + 1;
+      const to = from + pagingMeta.displayLength - 1;
+      ind.textContent =
+        "Page " + (listPageIndex + 1) + " · " + from + "–" + to + " sur " + filteredLen;
+    }
 
     function applyListDensity(mode) {
       const compact = mode === "compact";
@@ -1600,25 +1894,34 @@
       return items.filter((it) => String(it.name).toLowerCase().includes(needle));
     }
 
-    function setTotalsAndCaption(totalTasks, filteredShown) {
+    function setTotalsAndCaption(totalTasks, filteredShown, pageMeta) {
       const big = document.getElementById("item-count");
       const note = document.getElementById("list-count-note");
       if (big) big.textContent = String(totalTasks);
       if (!note) return;
       const hasFilter = nameFilterNormalized() !== "";
+      let text = "";
       if (totalTasks === 0) {
         note.textContent = "";
         return;
       }
       if (!hasFilter || filteredShown === totalTasks) {
-        note.textContent = totalTasks === 1 ? "1 tâche" : totalTasks + " tâches";
+        text = totalTasks === 1 ? "1 tâche" : totalTasks + " tâches";
       } else {
-        note.textContent =
+        text =
           filteredShown +
           " sur " +
           totalTasks +
           (totalTasks === 1 ? " tâche" : " tâches");
       }
+      if (pageMeta && pageMeta.pages > 1) {
+        text +=
+          " · pg. " +
+          (pageMeta.pageIdx + 1) +
+          " / " +
+          pageMeta.pages;
+      }
+      note.textContent = text;
     }
 
     function setListPanelBusy(busy) {
@@ -1842,7 +2145,67 @@
       const sorted = sortTasksCopy(items);
       const needle = nameFilterNormalized();
       const filtered = filterItemsByName(sorted, needle);
-      setTotalsAndCaption(items.length, filtered.length);
+      const ul = document.getElementById("items-list");
+      ul.innerHTML = "";
+      if (!items.length) {
+        editingId = null;
+        listPageIndex = 0;
+        ul.innerHTML =
+          '<li class="empty" role="status">Créez votre première tâche 🚀</li>';
+        ul.removeAttribute("role");
+        ul.removeAttribute("aria-label");
+        updateListDeadlineHint([], 0);
+        setTotalsAndCaption(0, 0);
+        updateTaskFilterAriaDesc(0, 0, null);
+        syncListPaginationUi(0, null);
+        return;
+      }
+      if (!filtered.length) {
+        editingId = null;
+        listPageIndex = 0;
+        ul.innerHTML =
+          '<li class="empty" role="status">Aucune tâche ne correspond à votre recherche</li>';
+        ul.removeAttribute("role");
+        ul.removeAttribute("aria-label");
+        updateListDeadlineHint([], 0);
+        setTotalsAndCaption(items.length, 0);
+        updateTaskFilterAriaDesc(0, items.length, null);
+        syncListPaginationUi(0, null);
+        return;
+      }
+
+      const usePaging = filtered.length > LIST_PAGINATION_THRESHOLD;
+      const totalPages = usePaging ? Math.ceil(filtered.length / LIST_PAGE_SIZE) : 1;
+      if (editingId !== null) {
+        const ei = filtered.findIndex((row) => Number(row.id) === editingId);
+        if (ei >= 0 && usePaging) {
+          listPageIndex = Math.floor(ei / LIST_PAGE_SIZE);
+        }
+      }
+      listPageIndex = Math.max(
+        0,
+        Math.min(listPageIndex, Math.max(0, totalPages - 1))
+      );
+      const startIdx = usePaging ? listPageIndex * LIST_PAGE_SIZE : 0;
+      const pageSlice =
+        usePaging ? filtered.slice(startIdx, startIdx + LIST_PAGE_SIZE) : filtered.slice();
+
+      const navPagingMeta =
+        usePaging && filtered.length > 0
+          ? {
+              pages: totalPages,
+              pageSize: LIST_PAGE_SIZE,
+              displayLength: pageSlice.length,
+            }
+          : null;
+
+      const captionPageMeta =
+        usePaging && totalPages > 1
+          ? { pageIdx: listPageIndex, pages: totalPages }
+          : null;
+
+      const pagingAria = captionPageMeta;
+
       dbg("renderItems", {
         count: items.length,
         filtered: filtered.length,
@@ -1850,35 +2213,34 @@
         ids: sorted.map((it) => it.id),
         editingId,
         rawSample: items[0],
+        paging: captionPageMeta,
+        pageShown: pageSlice.length,
       });
-      const ul = document.getElementById("items-list");
-      ul.innerHTML = "";
-      if (!items.length) {
-        editingId = null;
-        ul.innerHTML =
-          '<li class="empty" role="status">Créez votre première tâche 🚀</li>';
-        updateListDeadlineHint([], 0);
-        return;
-      }
-      if (!filtered.length) {
-        editingId = null;
-        ul.innerHTML =
-          '<li class="empty" role="status">Aucune tâche ne correspond à votre recherche</li>';
-        updateListDeadlineHint([], 0);
-        return;
-      }
+      setTotalsAndCaption(items.length, filtered.length, captionPageMeta);
+
+      updateTaskFilterAriaDesc(filtered.length, items.length, navPagingMeta);
+      syncListPaginationUi(filtered.length, navPagingMeta && navPagingMeta.pages > 1 ? navPagingMeta : null);
+
       const idNum = (x) => Number(x);
       const motionReduce = prefersReducedMotion();
       const staggerMs = motionReduce ? 22 : 40;
       const staggerCap = motionReduce ? 160 : 300;
       let i = 0;
-      for (const it of filtered) {
+      let slicePos = -1;
+
+      for (const it of pageSlice) {
+        slicePos += 1;
+        const ariaPos = startIdx + slicePos + 1;
         const li = document.createElement("li");
         li.className = "item item-animate-in";
         li.style.setProperty("--item-enter-delay", Math.min(i * staggerMs, staggerCap) + "ms");
         i += 1;
         const rowId = idNum(it.id);
         const isEditing = editingId !== null && rowId === editingId;
+        li.setAttribute("role", "listitem");
+        li.setAttribute("aria-posinset", String(ariaPos));
+        li.setAttribute("aria-setsize", String(filtered.length));
+        if (!isEditing) li.dataset.itemId = String(it.id);
 
         const main = document.createElement("div");
         main.className = "item-main";
@@ -2005,12 +2367,48 @@
         ul.appendChild(li);
       }
 
+      decorateListAria(ul, filtered.length, pageSlice.length, pagingAria);
       updateListDeadlineHint(filtered, filtered.length);
 
       const formEditing = ul.querySelector(".item-edit-form");
       if (formEditing) {
         const input = formEditing.querySelector('input[name="name"]');
         if (input) input.focus({ preventScroll: true });
+      }
+    }
+
+    async function runDeleteUsingButton(btn) {
+      if (!btn || btn.disabled) return;
+      const row = btn.closest(".item");
+      clearRowSwipe(row);
+      const id = btn.dataset.id;
+      if (!id) return;
+      btn.disabled = true;
+      const delUrl = api("/items/" + encodeURIComponent(id));
+      try {
+        dbg("delete fetch start", delUrl);
+        const r = await fetch(delUrl, {
+          method: "DELETE",
+          cache: "no-store",
+        });
+        const delText = await r.text();
+        dbg("delete response", { status: r.status, ok: r.ok, body: delText.slice(0, 300) });
+        if (!r.ok) {
+          let errJson = null;
+          try {
+            errJson = delText ? JSON.parse(delText) : null;
+          } catch (_) {}
+          dbgErr("delete HTTP error", { status: r.status, errJson, delText });
+          throw new Error("delete failed " + r.status);
+        }
+        dbg("delete OK, reloading items");
+        await runItemExit(row);
+        await loadItems();
+        showToast("Tâche supprimée");
+        dbg("delete flow done");
+      } catch (err) {
+        dbgErr("delete catch", err);
+        btn.disabled = false;
       }
     }
 
@@ -2021,6 +2419,8 @@
       if (!initialItemsLoaded) {
         setListPanelBusy(true);
         ul.innerHTML = skeletonListHtml(5);
+        const pg = document.getElementById("list-pagination");
+        if (pg) pg.hidden = true;
       }
       try {
         const r = await fetch(url, { cache: "no-store" });
@@ -2056,9 +2456,70 @@
         updateListDeadlineHint([], 0);
         document.getElementById("items-list").innerHTML =
           '<li class="empty">Chargement impossible</li>';
+        const pg = document.getElementById("list-pagination");
+        if (pg) pg.hidden = true;
         return false;
       }
       return true;
+    }
+
+    function wirePullToRefreshOnListScroll() {
+      const sc = document.getElementById("list-scroll");
+      const hint = document.getElementById("pull-refresh-hint");
+      if (!sc || !hint || sc.dataset.ptrPullWired === "1") return;
+      sc.dataset.ptrPullWired = "1";
+      let yStart = 0;
+      let arm = false;
+      let armMaxDy = 0;
+      let cooldownUntil = 0;
+      const hide = () => {
+        hint.textContent = "";
+        hint.classList.remove("pull-refresh-visible");
+      };
+      sc.addEventListener(
+        "touchstart",
+        (ev) => {
+          armMaxDy = 0;
+          arm = false;
+          if (performance.now() < cooldownUntil) return;
+          if (sc.scrollTop > 12) return;
+          arm = true;
+          yStart = ev.touches[0].clientY;
+        },
+        { passive: true }
+      );
+      sc.addEventListener(
+        "touchmove",
+        (ev) => {
+          if (!arm || sc.scrollTop > 12) return;
+          const dy = ev.touches[0].clientY - yStart;
+          if (dy > armMaxDy) armMaxDy = dy;
+          if (dy <= 14) return;
+          hint.textContent =
+            dy > PULL_REFRESH_MIN_DY
+              ? "Relâcher pour actualiser"
+              : "Continuer à tirer pour actualiser…";
+          hint.classList.add("pull-refresh-visible");
+        },
+        { passive: true }
+      );
+      sc.addEventListener(
+        "touchend",
+        async () => {
+          if (!arm || sc.scrollTop > 28) return;
+          arm = false;
+          if (armMaxDy < PULL_REFRESH_MIN_DY) {
+            hide();
+            return;
+          }
+          cooldownUntil = performance.now() + 2200;
+          hint.textContent = "Actualisation…";
+          hint.classList.add("pull-refresh-visible");
+          await loadItems();
+          hide();
+        },
+        { passive: true }
+      );
     }
 
     document.getElementById("items-list").addEventListener("click", async (e) => {
@@ -2082,37 +2543,8 @@
       const btn = e.target.closest(".btn-delete");
       dbg("list click", { target: e.target.tagName, closestDelete: !!btn });
       if (!btn || btn.disabled) return;
-      const id = btn.dataset.id;
-      dbg("delete click", { id, dataset: { ...btn.dataset }, disabled: btn.disabled });
-      if (!id) return;
-      btn.disabled = true;
-      const delUrl = api("/items/" + encodeURIComponent(id));
-      try {
-        dbg("delete fetch start", delUrl);
-        const r = await fetch(delUrl, {
-          method: "DELETE",
-          cache: "no-store",
-        });
-        const delText = await r.text();
-        dbg("delete response", { status: r.status, ok: r.ok, body: delText.slice(0, 300) });
-        if (!r.ok) {
-          let errJson = null;
-          try {
-            errJson = delText ? JSON.parse(delText) : null;
-          } catch (_) {}
-          dbgErr("delete HTTP error", { status: r.status, errJson, delText });
-          throw new Error("delete failed " + r.status);
-        }
-        dbg("delete OK, reloading items");
-        const row = btn.closest(".item");
-        await runItemExit(row);
-        await loadItems();
-        showToast("Tâche supprimée");
-        dbg("delete flow done");
-      } catch (err) {
-        dbgErr("delete catch", err);
-        btn.disabled = false;
-      }
+      dbg("delete click", { id: btn.dataset.id, dataset: { ...btn.dataset }, disabled: btn.disabled });
+      await runDeleteUsingButton(btn);
     });
 
     document.getElementById("items-list").addEventListener("submit", async (e) => {
@@ -2244,6 +2676,55 @@
       }
     });
 
+    wirePullToRefreshOnListScroll();
+
+    document.getElementById("items-list").addEventListener(
+      "pointerdown",
+      (e) => {
+        if (!swipeDeleteEnvironmentEnabled()) return;
+        if (e.pointerType === "mouse") return;
+        if (swipeGesture) return;
+        const li = e.target.closest("li.item");
+        if (
+          !li ||
+          !li.closest("#items-list") ||
+          li.classList.contains("empty") ||
+          li.classList.contains("item-skel")
+        )
+          return;
+        if (li.querySelector(".item-edit-form")) return;
+        if (e.target.closest("button, input, textarea, select, label")) return;
+        clearRowSwipe(li);
+        swipeGesture = {
+          pointerId: e.pointerId,
+          li,
+          x0: e.clientX,
+          y0: e.clientY,
+          axisLocked: false,
+          dxLast: 0,
+        };
+        window.addEventListener("pointermove", onSwipePointerMove, { passive: false });
+        window.addEventListener("pointerup", onSwipeGestureEnd, true);
+        window.addEventListener("pointercancel", onSwipeGestureEnd, true);
+      },
+      true
+    );
+
+    document.getElementById("list-page-prev").addEventListener("click", () => {
+      if (listPageIndex <= 0) return;
+      listPageIndex -= 1;
+      renderItems(lastItems);
+      const ls = document.getElementById("list-scroll");
+      if (ls) ls.scrollTop = 0;
+    });
+
+    document.getElementById("list-page-next").addEventListener("click", () => {
+      listPageIndex += 1;
+      renderItems(lastItems);
+      const ls = document.getElementById("list-scroll");
+      if (ls) ls.scrollTop = 0;
+    });
+
     document.getElementById("btn-ai-reprioritize").addEventListener("click", async () => {
       const btn = document.getElementById("btn-ai-reprioritize");
       const statusEl = document.getElementById("ai-status");
@@ -2299,6 +2780,7 @@
     });
 
     document.getElementById("task-sort").addEventListener("change", (e) => {
+      listPageIndex = 0;
       taskSortMode = String(e.target.value || "due");
       renderItems(lastItems);
     });
@@ -2315,6 +2797,7 @@
       const raw = e.target.value;
       taskFilterDebounceTimer = setTimeout(() => {
         taskFilterDebounceTimer = null;
+        listPageIndex = 0;
         taskNameFilterRaw = raw;
         const needle = nameFilterNormalized();
         const visible = filterItemsByName(lastItems, needle);
