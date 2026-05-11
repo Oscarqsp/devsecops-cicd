@@ -299,12 +299,37 @@
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      align-items: stretch;
+      align-items: flex-start;
     }
 
-    .form-fields .grow {
+    .form-field {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
       flex: 1;
       min-width: min(100%, 140px);
+    }
+
+    .form-field-date {
+      flex: 0 0 auto;
+      min-width: 132px;
+    }
+
+    .form-field .grow {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .field-feedback {
+      margin: 0;
+      min-height: 1.15em;
+      font-size: 0.6875rem;
+      line-height: 1.3;
+      color: var(--danger);
+    }
+
+    .field-feedback:empty {
+      visibility: hidden;
     }
 
     .form input[type="date"] {
@@ -844,11 +869,40 @@
 
     .item-edit-form {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 0.4rem;
       flex-wrap: wrap;
       flex: 1;
       min-width: 0;
+    }
+
+    .item-edit-field {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      flex: 1;
+      min-width: min(100%, 100px);
+    }
+
+    .item-edit-field--date {
+      flex: 0 0 auto;
+    }
+
+    .field-feedback-edit {
+      margin: 0;
+      min-height: 1.1em;
+      font-size: 0.625rem;
+      line-height: 1.25;
+      color: var(--danger);
+    }
+
+    .field-feedback-edit:empty {
+      visibility: hidden;
+    }
+
+    .item-id.item-id--edit {
+      align-self: center;
+      margin-top: 0.12rem;
     }
 
     .item-edit-form input[type="date"] {
@@ -948,8 +1002,8 @@
       gap: 0.3rem;
     }
 
-    body.list-density-compact #list-panel .item-edit-form input[type="date"],
-    body.list-density-compact #list-panel .item-edit-form input[type="text"] {
+    body.list-density-compact #list-panel .item-edit-field input[type="date"],
+    body.list-density-compact #list-panel .item-edit-field input[type="text"] {
       padding: 0.28rem 0.42rem;
       font-size: 0.78rem;
     }
@@ -1228,16 +1282,31 @@
         <div class="panel-label">Nouvelle tâche</div>
         <form class="form" id="add-form">
           <div class="form-fields">
-            <input
-              class="grow"
-              type="text"
-              name="name"
-              id="name"
-              placeholder="Libellé"
-              autocomplete="off"
-              required
-            />
-            <input type="date" name="due_date" id="due_date" required aria-label="Échéance" />
+            <div class="form-field">
+              <input
+                class="grow"
+                type="text"
+                name="name"
+                id="name"
+                placeholder="Libellé"
+                autocomplete="off"
+                required
+                maxlength="500"
+                aria-describedby="hint-name-add"
+              />
+              <p class="field-feedback" id="hint-name-add" aria-live="polite"></p>
+            </div>
+            <div class="form-field form-field-date">
+              <input
+                type="date"
+                name="due_date"
+                id="due_date"
+                required
+                aria-label="Échéance"
+                aria-describedby="hint-due-add"
+              />
+              <p class="field-feedback" id="hint-due-add" aria-live="polite"></p>
+            </div>
           </div>
           <div class="form-actions">
             <button type="submit" class="btn-primary">Ajouter</button>
@@ -1395,6 +1464,60 @@
       } finally {
         clearTimeout(tid);
       }
+    }
+
+    /** Longueur minimale après trim uniquement pour la création (l’édition reflète déjà les données serveur). */
+    const ADD_TASK_NAME_MIN_TRIM = 2;
+
+    /** Options : `minTrimmed` — appliqué seulement au formulaire d’ajout ; édition = pas de seuil minimal. */
+    function validateTaskNameInput(el, opts) {
+      const minT =
+        opts && typeof opts.minTrimmed === "number" ? opts.minTrimmed : 0;
+      const raw = el.value || "";
+      const t = raw.trim();
+      if (!raw.length) {
+        el.setCustomValidity("");
+      } else if (!t.length) {
+        el.setCustomValidity(
+          "Indiquez un libellé réel : les espaces seuls ne sont pas acceptés."
+        );
+      } else if (minT > 0 && t.length < minT) {
+        el.setCustomValidity(
+          "Au moins " + minT + " caractères utiles (après suppression des espaces en trop)."
+        );
+      } else {
+        el.setCustomValidity("");
+      }
+    }
+
+    function wireDateHintCleanup(dateEl, hintEl) {
+      if (!dateEl || !hintEl) return;
+      dateEl.addEventListener("invalid", () => {
+        hintEl.textContent = dateEl.validationMessage || "";
+      });
+      ["input", "change"].forEach((ev) =>
+        dateEl.addEventListener(ev, () => {
+          if (dateEl.checkValidity()) hintEl.textContent = "";
+        })
+      );
+    }
+
+    /** Libellé (post-trim serveur). */
+    function wireTaskNameFieldHints(el, hintEl, opts) {
+      if (!el || !hintEl) return;
+      const run = () => validateTaskNameInput(el, opts);
+      el.addEventListener("input", () => {
+        run();
+        if (el.checkValidity()) hintEl.textContent = "";
+      });
+      el.addEventListener("blur", () => {
+        run();
+        hintEl.textContent = el.checkValidity() ? "" : el.validationMessage;
+      });
+      el.addEventListener("invalid", () => {
+        run();
+        hintEl.textContent = el.validationMessage || "";
+      });
     }
 
     let initialItemsLoaded = false;
@@ -1764,25 +1887,62 @@
           const form = document.createElement("form");
           form.className = "item-edit-form";
           form.dataset.id = String(it.id);
+          form.noValidate = true;
+          form.id = "item-edit-form-" + rowId;
+
+          const nameField = document.createElement("div");
+          nameField.className = "item-edit-field";
+
           const inp = document.createElement("input");
           inp.type = "text";
           inp.name = "name";
+          inp.id = "edit-name-" + rowId;
           inp.value = it.name;
           inp.autocomplete = "off";
           inp.required = true;
+          inp.maxLength = 500;
           inp.setAttribute("aria-label", "Libellé de la tâche");
+
+          const nameHint = document.createElement("p");
+          nameHint.className = "field-feedback-edit";
+          nameHint.id = "hint-edit-name-" + rowId;
+          inp.setAttribute("aria-describedby", nameHint.id);
+
+          nameField.appendChild(inp);
+          nameField.appendChild(nameHint);
+
+          const dateField = document.createElement("div");
+          dateField.className = "item-edit-field item-edit-field--date";
+
           const dateInp = document.createElement("input");
           dateInp.type = "date";
           dateInp.name = "due_date";
+          dateInp.id = "edit-due-" + rowId;
           dateInp.required = true;
           dateInp.value = toInputDateValue(it);
           dateInp.setAttribute("aria-label", "Échéance");
+
+          const dateHint = document.createElement("p");
+          dateHint.className = "field-feedback-edit";
+          dateHint.id = "hint-edit-due-" + rowId;
+          dateInp.setAttribute("aria-describedby", dateHint.id);
+
+          dateField.appendChild(dateInp);
+          dateField.appendChild(dateHint);
+
           const idHint = document.createElement("span");
-          idHint.className = "item-id";
+          idHint.className = "item-id item-id--edit";
           idHint.textContent = "#" + it.id;
-          form.appendChild(inp);
-          form.appendChild(dateInp);
+
+          form.appendChild(nameField);
+          form.appendChild(dateField);
           form.appendChild(idHint);
+
+          wireTaskNameFieldHints(inp, nameHint);
+          wireDateHintCleanup(dateInp, dateHint);
+
+          validateTaskNameInput(inp);
+
           main.appendChild(form);
         } else {
           const nameEl = document.createElement("span");
@@ -1806,15 +1966,14 @@
         actions.className = "item-actions";
 
         if (isEditing) {
+          const formEl = main.querySelector(".item-edit-form");
           const save = document.createElement("button");
-          save.type = "button";
+          save.type = "submit";
           save.className = "btn-primary btn-compact";
           save.textContent = "OK";
-          const formEl = main.querySelector(".item-edit-form");
-          save.addEventListener("click", (ev) => {
-            ev.preventDefault();
-            formEl.requestSubmit();
-          });
+          if (formEl && formEl.id) save.setAttribute("form", formEl.id);
+          save.setAttribute("aria-label", "Enregistrer les modifications");
+
           const cancel = document.createElement("button");
           cancel.type = "button";
           cancel.className = "btn-ghost btn-compact";
@@ -1851,7 +2010,7 @@
       const formEditing = ul.querySelector(".item-edit-form");
       if (formEditing) {
         const input = formEditing.querySelector('input[name="name"]');
-        if (input) input.focus();
+        if (input) input.focus({ preventScroll: true });
       }
     }
 
@@ -1963,9 +2122,29 @@
       const id = form.dataset.id;
       const input = form.querySelector('input[name="name"]');
       const dateInp = form.querySelector('input[name="due_date"]');
-      const name = input ? input.value.trim() : "";
-      const due_date = dateInp ? dateInp.value.trim() : "";
-      if (!id || !name || !due_date) return;
+      if (!input || !dateInp || !id) return;
+      const sid = String(id);
+      const nameHint = document.getElementById("hint-edit-name-" + sid);
+      const dateHint = document.getElementById("hint-edit-due-" + sid);
+
+      validateTaskNameInput(input);
+
+      if (!input.checkValidity()) {
+        if (nameHint) nameHint.textContent = input.validationMessage || "";
+        input.focus({ preventScroll: true });
+        return;
+      }
+      if (!dateInp.checkValidity()) {
+        if (dateHint) dateHint.textContent = dateInp.validationMessage || "";
+        dateInp.focus({ preventScroll: true });
+        return;
+      }
+      if (nameHint) nameHint.textContent = "";
+      if (dateHint) dateHint.textContent = "";
+
+      const name = input.value.trim();
+      const due_date = dateInp.value.trim();
+      if (!name || !due_date) return;
       const saveBtn = form.closest(".item")?.querySelector(".btn-primary.btn-compact");
       if (saveBtn) saveBtn.disabled = true;
       try {
@@ -2005,6 +2184,27 @@
       const submitBtn = form.querySelector('button[type="submit"]');
       const input = document.getElementById("name");
       const dueEl = document.getElementById("due_date");
+      const hintName = document.getElementById("hint-name-add");
+      const hintDue = document.getElementById("hint-due-add");
+
+      validateTaskNameInput(input, { minTrimmed: ADD_TASK_NAME_MIN_TRIM });
+
+      let block = false;
+      if (!input.checkValidity()) {
+        if (hintName) hintName.textContent = input.validationMessage || "";
+        input.focus({ preventScroll: true });
+        block = true;
+      }
+      if (!dueEl.checkValidity()) {
+        if (hintDue) hintDue.textContent = dueEl.validationMessage || "";
+        if (!block) dueEl.focus({ preventScroll: true });
+        block = true;
+      }
+      if (block) return;
+
+      if (hintName) hintName.textContent = "";
+      if (hintDue) hintDue.textContent = "";
+
       const name = input.value.trim();
       const due_date = dueEl ? dueEl.value.trim() : "";
       if (!name || !due_date) return;
@@ -2025,7 +2225,11 @@
         if (listOk) {
           input.value = "";
           if (dueEl) dueEl.value = todayLocalISODate();
+          validateTaskNameInput(input, { minTrimmed: ADD_TASK_NAME_MIN_TRIM });
+          if (hintName) hintName.textContent = "";
+          if (hintDue) hintDue.textContent = "";
           showToast("Tâche ajoutée");
+          requestAnimationFrame(() => input.focus({ preventScroll: true }));
         } else {
           showToast(
             "Tâche enregistrée, mais impossible d’actualiser la liste. Actualisez la page.",
@@ -2123,6 +2327,13 @@
         renderItems(lastItems);
       }, TASK_FILTER_DEBOUNCE_MS);
     });
+
+    wireTaskNameFieldHints(
+      document.getElementById("name"),
+      document.getElementById("hint-name-add"),
+      { minTrimmed: ADD_TASK_NAME_MIN_TRIM }
+    );
+    wireDateHintCleanup(document.getElementById("due_date"), document.getElementById("hint-due-add"));
 
     document.getElementById("due_date").value = todayLocalISODate();
     initListDensity();
