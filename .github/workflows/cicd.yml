@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Récupération du code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Installation des dépendances
         working-directory: ./app
@@ -33,14 +33,34 @@ jobs:
           exit-code: 0
           severity: HIGH,CRITICAL
 
+  docker-compose-test:
+    name: Test Docker Compose
+    runs-on: ubuntu-latest
+    needs: security-scan
+    steps:
+      - name: Récupération du code
+        uses: actions/checkout@v4
+
+      - name: Lancement de la stack Docker Compose
+        run: docker compose up -d
+
+      - name: Vérification des conteneurs
+        run: |
+          sleep 10
+          docker compose ps
+          docker ps
+
+      - name: Arrêt de la stack
+        run: docker compose down
+
   deploy:
     name: Déploiement EC2
     runs-on: ubuntu-latest
-    needs: security-scan
+    needs: docker-compose-test
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Récupération du code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Déploiement via SSH
         uses: appleboy/ssh-action@master
@@ -51,8 +71,7 @@ jobs:
           script: |
             cd /home/ubuntu
             git clone https://github.com/Oscarqsp/devsecops-cicd.git || git -C devsecops-cicd pull
-            docker stop devsecops-app || true
-            docker rm devsecops-app || true
-            docker build -t devsecops-app:latest ./devsecops-cicd/app
-            docker run -d --name devsecops-app -p 3000:3000 devsecops-app:latest
-            echo "Déployé avec succès"
+            cd devsecops-cicd
+            docker compose down || true
+            docker compose up -d
+            docker compose ps
