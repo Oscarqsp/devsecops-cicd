@@ -374,6 +374,45 @@
       font-variant-numeric: tabular-nums;
     }
 
+    .list-search-wrap {
+      padding: 2px clamp(14px, 2vw, 18px) 10px;
+      flex-shrink: 0;
+    }
+
+    .list-search {
+      width: 100%;
+      padding: 0.45rem 0.75rem;
+      font-size: 0.875rem;
+      border: 1px solid var(--stroke);
+      border-radius: 10px;
+      background: var(--surface2);
+      color: var(--text);
+      outline: none;
+      font-family: inherit;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .list-search:focus-visible {
+      border-color: rgba(0, 113, 227, 0.52);
+      box-shadow: var(--focus-ring);
+    }
+
+    .list-search::placeholder {
+      color: #767676;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
     /* Scroll uniquement pour la liste (le document ne bouge pas) */
     .list-scroll {
       flex: 1;
@@ -778,6 +817,16 @@
           <h2>Tâches</h2>
           <span class="count" id="list-count-note"></span>
         </div>
+        <div class="list-search-wrap">
+          <label class="sr-only" for="task-filter">Filtrer les tâches par nom</label>
+          <input
+            type="search"
+            id="task-filter"
+            class="list-search"
+            autocomplete="off"
+            placeholder="Filtrer par nom…"
+          />
+        </div>
         <div class="list-scroll">
           <ul class="items" id="items-list"></ul>
         </div>
@@ -806,6 +855,39 @@
     let editingId = null;
     let toastTimer = null;
     let initialItemsLoaded = false;
+    let taskNameFilterRaw = "";
+    let taskFilterDebounceTimer = null;
+    const TASK_FILTER_DEBOUNCE_MS = 200;
+
+    function nameFilterNormalized() {
+      return String(taskNameFilterRaw || "").trim().toLowerCase();
+    }
+
+    function filterItemsByName(items, needle) {
+      if (!needle) return items.slice();
+      return items.filter((it) => String(it.name).toLowerCase().includes(needle));
+    }
+
+    function setTotalsAndCaption(totalTasks, filteredShown) {
+      const big = document.getElementById("item-count");
+      const note = document.getElementById("list-count-note");
+      if (big) big.textContent = String(totalTasks);
+      if (!note) return;
+      const hasFilter = nameFilterNormalized() !== "";
+      if (totalTasks === 0) {
+        note.textContent = "";
+        return;
+      }
+      if (!hasFilter || filteredShown === totalTasks) {
+        note.textContent = totalTasks === 1 ? "1 tâche" : totalTasks + " tâches";
+      } else {
+        note.textContent =
+          filteredShown +
+          " sur " +
+          totalTasks +
+          (totalTasks === 1 ? " tâche" : " tâches");
+      }
+    }
 
     function setListPanelBusy(busy) {
       const panel = document.getElementById("list-panel");
@@ -850,13 +932,6 @@
           el.setAttribute("aria-hidden", "true");
         }, 280);
       }, 2600);
-    }
-
-    function setCounts(n) {
-      const el = document.getElementById("item-count");
-      const note = document.getElementById("list-count-note");
-      if (el) el.textContent = String(n);
-      if (note) note.textContent = n === 1 ? "1 tâche" : n + " tâches";
     }
 
     function todayLocalISODate() {
@@ -948,9 +1023,12 @@
 
     function renderItems(items) {
       lastItems = items;
-      setCounts(items.length);
+      const needle = nameFilterNormalized();
+      const filtered = filterItemsByName(items, needle);
+      setTotalsAndCaption(items.length, filtered.length);
       dbg("renderItems", {
         count: items.length,
+        filtered: filtered.length,
         ids: items.map((it) => it.id),
         editingId,
         rawSample: items[0],
@@ -963,8 +1041,14 @@
           '<li class="empty" role="status">Créez votre première tâche 🚀</li>';
         return;
       }
+      if (!filtered.length) {
+        editingId = null;
+        ul.innerHTML =
+          '<li class="empty" role="status">Aucune tâche ne correspond à votre recherche</li>';
+        return;
+      }
       const idNum = (x) => Number(x);
-      for (const it of items) {
+      for (const it of filtered) {
         const li = document.createElement("li");
         li.className = "item";
         const rowId = idNum(it.id);
@@ -1099,7 +1183,8 @@
         setListPanelBusy(false);
       } catch (err) {
         dbgErr("loadItems failed", err);
-        setCounts(0);
+        lastItems = [];
+        setTotalsAndCaption(0, 0);
         initialItemsLoaded = true;
         setListPanelBusy(false);
         document.getElementById("items-list").innerHTML =
@@ -1266,6 +1351,24 @@
       e.preventDefault();
       editingId = null;
       renderItems(lastItems);
+    });
+
+    document.getElementById("task-filter").addEventListener("input", (e) => {
+      clearTimeout(taskFilterDebounceTimer);
+      const raw = e.target.value;
+      taskFilterDebounceTimer = setTimeout(() => {
+        taskFilterDebounceTimer = null;
+        taskNameFilterRaw = raw;
+        const needle = nameFilterNormalized();
+        const visible = filterItemsByName(lastItems, needle);
+        if (
+          editingId !== null &&
+          !visible.some((x) => Number(x.id) === editingId)
+        ) {
+          editingId = null;
+        }
+        renderItems(lastItems);
+      }, TASK_FILTER_DEBOUNCE_MS);
     });
 
     document.getElementById("due_date").value = todayLocalISODate();
