@@ -603,6 +603,44 @@
     .ai-rationale[hidden] {
       display: none !important;
     }
+
+    .toast {
+      position: fixed;
+      bottom: max(24px, env(safe-area-inset-bottom));
+      left: 50%;
+      transform: translate3d(-50%, 14px, 0);
+      max-width: min(92vw, 360px);
+      padding: 0.625rem 1.2rem;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      text-align: center;
+      color: var(--text);
+      background: var(--surface2);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      border: 1px solid var(--stroke);
+      border-radius: 999px;
+      box-shadow: var(--shadow);
+      opacity: 0;
+      pointer-events: none;
+      visibility: hidden;
+      transition:
+        opacity 0.22s ease,
+        transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
+        visibility 0s linear 0.24s;
+      z-index: 200;
+    }
+
+    .toast.toast--visible {
+      opacity: 1;
+      visibility: visible;
+      transform: translate3d(-50%, 0, 0);
+      transition:
+        opacity 0.24s ease,
+        transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+        visibility 0s linear 0s;
+    }
   </style>
 </head>
 <body>
@@ -667,6 +705,15 @@
     </div>
   </div>
 
+  <div
+    id="toast"
+    class="toast"
+    role="status"
+    aria-live="polite"
+    aria-atomic="true"
+    aria-hidden="true"
+  ></div>
+
   <script>
     const api = (path) => "/api" + path;
     const DBG = "[devsecops-ui]";
@@ -677,6 +724,26 @@
 
     let lastItems = [];
     let editingId = null;
+    let toastTimer = null;
+
+    function showToast(message) {
+      const el = document.getElementById("toast");
+      if (!el || !message) return;
+      el.textContent = message;
+      el.setAttribute("aria-hidden", "false");
+      clearTimeout(toastTimer);
+      el.classList.remove("toast--visible");
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => el.classList.add("toast--visible"));
+      });
+      toastTimer = setTimeout(() => {
+        el.classList.remove("toast--visible");
+        toastTimer = setTimeout(() => {
+          el.textContent = "";
+          el.setAttribute("aria-hidden", "true");
+        }, 280);
+      }, 2600);
+    }
 
     function setCounts(n) {
       const el = document.getElementById("item-count");
@@ -933,6 +1000,7 @@
         }
         dbg("delete OK, reloading items");
         await loadItems();
+        showToast("Tâche supprimée");
         dbg("delete flow done");
       } catch (err) {
         dbgErr("delete catch", err);
@@ -964,6 +1032,7 @@
         if (!r.ok) throw new Error("patch failed " + r.status);
         editingId = null;
         await loadItems();
+        showToast("Tâche mise à jour");
       } catch (err) {
         dbgErr("patch error", err);
         if (saveBtn) saveBtn.disabled = false;
@@ -988,6 +1057,7 @@
         input.value = "";
         if (dueEl) dueEl.value = todayLocalISODate();
         await loadItems();
+        showToast("Tâche ajoutée");
       } catch {
         /* ignore */
       }
