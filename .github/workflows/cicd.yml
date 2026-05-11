@@ -89,35 +89,26 @@ jobs:
     steps:
       - name: Récupération du code
         uses: actions/checkout@v4
-
-      - name: Installation clé SSH et known_hosts
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-        run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/ec2_deploy_key
-          chmod 600 ~/.ssh/ec2_deploy_key
-          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-
-      - name: Envoyer tout le projet sur l’EC2 (archive + extraction)
-        env:
-          EC2_USER: ${{ secrets.EC2_USER }}
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-        run: |
-          set -euo pipefail
-          SSH_OPTS=(-i "$HOME/.ssh/ec2_deploy_key" -o IdentitiesOnly=yes -o BatchMode=yes)
-          DEST="${EC2_USER}@${EC2_HOST}"
-          ssh "${SSH_OPTS[@]}" "$DEST" 'rm -rf "$HOME/devsecops-cicd" && mkdir -p "$HOME/devsecops-cicd"'
-          tar -czf - --exclude='./.git' --exclude='./app/node_modules' . | ssh "${SSH_OPTS[@]}" "$DEST" 'tar -xzf - -C "$HOME/devsecops-cicd"'
-
-      - name: Docker Compose sur l’EC2
+      - name: Déploiement via SSH
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd "$HOME/devsecops-cicd"
+            if ! command -v git &> /dev/null; then
+              sudo apt install git -y
+            fi
+            if ! command -v docker &> /dev/null; then
+              curl -fsSL https://get.docker.com | sudo sh
+              sudo usermod -aG docker ubuntu
+              sudo systemctl start docker
+              sudo systemctl enable docker
+            fi
+            sudo rm -rf /home/ubuntu/devsecops-cicd
+            cd /home/ubuntu
+            git clone https://github.com/Oscarqsp/devsecops-cicd.git
+            cd devsecops-cicd
             sudo docker compose down || true
             sudo docker compose up -d
+            sudo docker compose ps
