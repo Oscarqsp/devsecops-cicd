@@ -93,3 +93,47 @@ services:
 volumes:
   db_data:
   portainer_data:
+
+services:
+  # Base de données sécurisée
+  db:
+    image: mariadb:10.11
+    container_name: mariadb_backend
+    restart: always
+    environment:
+      # Utilisation de variables (à définir dans un fichier .env plus tard)
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: crud_db
+      MYSQL_USER: user_app
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    networks:
+      - backend_net
+
+  # Votre application CRUD (que nous coderons à l'étape 2)
+  app:
+    build: ./app
+    container_name: crud_app
+    restart: always
+    depends_on:
+      - db
+    networks:
+      - backend_net
+      - frontend_net
+
+  # Frontend Nginx faisant office de Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: nginx_frontend
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app
+    networks:
+      - frontend_net
+
+networks:
+  frontend_net:
+  backend_net:
+    internal: true # Réseau isolé pour la DB (Sécurité !)
