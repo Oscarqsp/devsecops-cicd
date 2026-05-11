@@ -545,6 +545,68 @@
       text-align: center;
     }
 
+    .item.item-skel {
+      pointer-events: none;
+    }
+
+    .item-skel .item-skel-main {
+      flex: 1;
+      min-width: 0;
+      align-items: center;
+    }
+
+    .sk {
+      display: inline-block;
+      border-radius: 6px;
+      background: linear-gradient(
+        100deg,
+        rgba(0, 0, 0, 0.055) 0%,
+        rgba(0, 0, 0, 0.095) 46%,
+        rgba(0, 0, 0, 0.055) 92%
+      );
+      background-size: 220% 100%;
+      animation: sk-shimmer 1.15s ease-in-out infinite;
+    }
+
+    @keyframes sk-shimmer {
+      0% {
+        background-position: 100% 0;
+      }
+      100% {
+        background-position: -100% 0;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .sk {
+        animation: none;
+        background: rgba(0, 0, 0, 0.068);
+      }
+    }
+
+    .sk-title {
+      width: min(52%, 200px);
+      height: 0.85rem;
+    }
+
+    .sk-pill {
+      width: 4.25rem;
+      height: 0.68rem;
+      border-radius: 6px;
+    }
+
+    .sk-id {
+      width: 1.85rem;
+      height: 0.62rem;
+    }
+
+    .sk-btn {
+      width: 2.65rem;
+      height: 1.45rem;
+      border-radius: 980px;
+      vertical-align: middle;
+    }
+
     .ai-block {
       margin-top: clamp(12px, 2vh, 16px);
       padding-top: clamp(12px, 2vh, 16px);
@@ -693,7 +755,7 @@
         </div>
       </section>
 
-      <section class="panel panel-list" aria-label="Liste des tâches">
+      <section class="panel panel-list" id="list-panel" aria-label="Liste des tâches">
         <div class="list-header">
           <h2>Tâches</h2>
           <span class="count" id="list-count-note"></span>
@@ -725,6 +787,33 @@
     let lastItems = [];
     let editingId = null;
     let toastTimer = null;
+    let initialItemsLoaded = false;
+
+    function setListPanelBusy(busy) {
+      const panel = document.getElementById("list-panel");
+      if (panel) panel.setAttribute("aria-busy", busy ? "true" : "false");
+    }
+
+    function skeletonListHtml(rowCount) {
+      const n = Number.isFinite(rowCount) ? rowCount : 5;
+      const rows = [];
+      for (let i = 0; i < n; i++) {
+        rows.push(
+          '<li class="item item-skel" aria-hidden="true">' +
+            '<div class="item-main item-skel-main">' +
+            '<span class="sk sk-title"></span>' +
+            '<span class="sk sk-pill"></span>' +
+            '<span class="sk sk-id"></span>' +
+            "</div>" +
+            '<div class="item-actions" aria-hidden="true">' +
+            '<span class="sk sk-btn"></span>' +
+            '<span class="sk sk-btn"></span>' +
+            "</div>" +
+            "</li>"
+        );
+      }
+      return rows.join("");
+    }
 
     function showToast(message) {
       const el = document.getElementById("toast");
@@ -926,7 +1015,12 @@
 
     async function loadItems() {
       const url = api("/items");
+      const ul = document.getElementById("items-list");
       dbg("loadItems fetch", url);
+      if (!initialItemsLoaded) {
+        setListPanelBusy(true);
+        ul.innerHTML = skeletonListHtml(5);
+      }
       try {
         const r = await fetch(url, { cache: "no-store" });
         const text = await r.text();
@@ -948,9 +1042,13 @@
           editingId = null;
         }
         renderItems(list);
+        initialItemsLoaded = true;
+        setListPanelBusy(false);
       } catch (err) {
         dbgErr("loadItems failed", err);
         setCounts(0);
+        initialItemsLoaded = true;
+        setListPanelBusy(false);
         document.getElementById("items-list").innerHTML =
           '<li class="empty">Chargement impossible</li>';
       }
