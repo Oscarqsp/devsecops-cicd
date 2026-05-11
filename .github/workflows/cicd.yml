@@ -110,11 +110,11 @@ jobs:
               sudo systemctl start docker
               sudo systemctl enable docker
             fi
+            sudo docker compose -f /home/ubuntu/devsecops-cicd/docker-compose.yml down || true
             sudo rm -rf /home/ubuntu/devsecops-cicd
             cd /home/ubuntu
             git clone https://github.com/Oscarqsp/devsecops-cicd.git
             cd devsecops-cicd
             echo "MISTRAL_API_KEY=$MISTRAL_API_KEY" > .env
-            sudo docker compose down || true
             sudo docker compose up -d
             sudo docker compose ps
