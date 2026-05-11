@@ -109,26 +109,49 @@ jobs:
     steps:
       - name: Récupération du code
         uses: actions/checkout@v4
-      - name: Déploiement via SSH
-        uses: appleboy/ssh-action@master
+
+      - name: Fichier .env (secrets → racine du projet)
         env:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+        run: |
+          printf 'MISTRAL_API_KEY=%s\n' "${MISTRAL_API_KEY:-}" > .env
+
+      - name: Installation clé SSH et known_hosts
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/ec2_deploy_key
+          chmod 600 ~/.ssh/ec2_deploy_key
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Synchroniser tout le projet vers l’EC2 (rsync)
+        env:
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          rsync -avz --delete \
+            --exclude '.git/' \
+            --exclude 'app/node_modules/' \
+            -e "ssh -i $HOME/.ssh/ec2_deploy_key -o IdentitiesOnly=yes" \
+            ./ "${EC2_USER}@${EC2_HOST}:~/devsecops-cicd/"
+
+      - name: Docker Compose sur l’EC2
+        uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: MISTRAL_API_KEY
           script: |
+            set -e
             if ! command -v docker &> /dev/null; then
               curl -fsSL https://get.docker.com | sudo sh
-              sudo usermod -aG docker ubuntu
-              sudo systemctl start docker
-              sudo systemctl enable docker
+              sudo usermod -aG docker "$USER" || true
+              sudo systemctl enable --now docker
             fi
-            cd /home/ubuntu
-            git clone https://github.com/Oscarqsp/devsecops-cicd.git || git -C devsecops-cicd pull
-            cd devsecops-cicd
-            printf 'MISTRAL_API_KEY=%s\n' "$MISTRAL_API_KEY" > .env
+            cd ~/devsecops-cicd
             sudo docker compose down || true
+            sudo docker compose pull || true
             sudo docker compose up -d
             sudo docker compose ps
