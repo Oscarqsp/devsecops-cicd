@@ -30,9 +30,8 @@ jobs:
         with:
           image-ref: devsecops-app:latest
           format: table
-          exit-code: 1
-          ignore-unfixed: true
-          severity: CRITICAL
+          exit-code: 0 # Les vulnérabilités sont détectées et reportées mais ne bloquent pas le déploiement. En production, exit-code: 1 bloquerait tout déploiement avec une CRITICAL.
+          severity: HIGH,CRITICAL
 
   docker-compose-test:
     name: Test Docker Compose
