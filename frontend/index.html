@@ -190,6 +190,43 @@
       line-height: 1.3;
     }
 
+    .stat-breakdown {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 10px 14px;
+      margin: -2px 0 clamp(14px, 2vh, 18px);
+      font-size: 0.75rem;
+      font-weight: 500;
+      line-height: 1.35;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-breakdown .stat-bit {
+      display: inline-flex;
+      gap: 0.25rem;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .stat-breakdown .stat-bit strong {
+      font-weight: 600;
+      color: var(--text);
+      min-width: 0.6rem;
+    }
+
+    .stat-breakdown .stat-bit--overdue strong {
+      color: #ae1320;
+    }
+
+    .stat-breakdown .stat-bit--today strong {
+      color: #954c06;
+    }
+
+    .stat-breakdown .stat-bit--week strong {
+      color: #3a3a3d;
+    }
+
     .form {
       display: flex;
       flex-direction: column;
@@ -809,6 +846,16 @@
           <span class="big" id="item-count">0</span>
           <span class="hint">tâches<br />enregistrées</span>
         </div>
+        <div
+          class="stat-breakdown"
+          id="stat-breakdown"
+          aria-label="Synthèse des échéances"
+          aria-live="polite"
+        >
+          <span class="stat-bit stat-bit--overdue"><strong id="stat-overdue">0</strong> en retard</span>
+          <span class="stat-bit stat-bit--today"><strong id="stat-today">0</strong> aujourd’hui</span>
+          <span class="stat-bit stat-bit--week"><strong id="stat-week">0</strong> encore cette semaine</span>
+        </div>
         <div class="panel-label">Nouvelle tâche</div>
         <form class="form" id="add-form">
           <div class="form-fields">
@@ -1056,6 +1103,48 @@
       );
     }
 
+    /** Dimanche de la même semaine calendaire locale que la date (lun.→dim. classique via getDay JS). */
+    function endOfCalendarWeekSundayLocalISO(isoYYYYMMDD) {
+      const m = String(isoYYYYMMDD || todayLocalISODate()).match(
+        /^(\d{4})-(\d{2})-(\d{2})/
+      );
+      if (!m) return "";
+      const y = Number.parseInt(m[1], 10);
+      const mo = Number.parseInt(m[2], 10);
+      const d = Number.parseInt(m[3], 10);
+      const dt = new Date(y, mo - 1, d);
+      const dow = dt.getDay();
+      const daysUntilSunday = dow === 0 ? 0 : 7 - dow;
+      return addCalendarDaysLocalISO(m[0], daysUntilSunday);
+    }
+
+    /** Compte tous les articles (liste serveur complète). */
+    function taskDeadlineStatCounts(items) {
+      const today = todayLocalISODate();
+      const sundayISO = endOfCalendarWeekSundayLocalISO(today);
+      let overdue = 0;
+      let dueToday = 0;
+      let dueLaterThisWeek = 0;
+      for (const row of items || []) {
+        const iso = toInputDateValue(row);
+        if (!iso) continue;
+        if (iso < today) overdue++;
+        else if (iso === today) dueToday++;
+        else if (iso <= sundayISO) dueLaterThisWeek++;
+      }
+      return { overdue, dueToday, dueLaterThisWeek };
+    }
+
+    function updateDeadlineStatDisplays(items) {
+      const s = taskDeadlineStatCounts(items);
+      const oe = document.getElementById("stat-overdue");
+      const td = document.getElementById("stat-today");
+      const wk = document.getElementById("stat-week");
+      if (oe) oe.textContent = String(s.overdue);
+      if (td) td.textContent = String(s.dueToday);
+      if (wk) wk.textContent = String(s.dueLaterThisWeek);
+    }
+
     /** Jalons à partir de la date locale du jour civil. */
     function dueDateToneClass(row) {
       const iso = toInputDateValue(row);
@@ -1098,6 +1187,7 @@
 
     function renderItems(items) {
       lastItems = items;
+      updateDeadlineStatDisplays(items);
       const sorted = sortTasksCopy(items);
       const needle = nameFilterNormalized();
       const filtered = filterItemsByName(sorted, needle);
@@ -1261,6 +1351,7 @@
       } catch (err) {
         dbgErr("loadItems failed", err);
         lastItems = [];
+        updateDeadlineStatDisplays([]);
         setTotalsAndCaption(0, 0);
         initialItemsLoaded = true;
         setListPanelBusy(false);
