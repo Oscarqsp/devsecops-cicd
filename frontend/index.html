@@ -447,6 +447,24 @@
       font-variant-numeric: tabular-nums;
     }
 
+    .item .item-date.item-date--overdue {
+      color: #ae1320;
+      background: rgba(255, 59, 48, 0.12);
+      font-weight: 600;
+    }
+
+    .item .item-date.item-date--urgent {
+      color: #954c06;
+      background: rgba(255, 149, 0, 0.16);
+      font-weight: 600;
+    }
+
+    .item .item-date.item-date--upcoming {
+      color: var(--muted);
+      background: rgba(0, 0, 0, 0.05);
+      font-weight: 500;
+    }
+
     .item .item-id {
       color: var(--muted);
       font-weight: 400;
@@ -872,6 +890,42 @@
       return d + "/" + mo + "/" + y;
     }
 
+    function addCalendarDaysLocalISO(isoYYYYMMDD, deltaDays) {
+      const m = String(isoYYYYMMDD).match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (!m) return "";
+      const y = Number.parseInt(m[1], 10);
+      const mo = Number.parseInt(m[2], 10);
+      const d = Number.parseInt(m[3], 10);
+      const dt = new Date(y, mo - 1, d + Number(deltaDays || 0));
+      return (
+        dt.getFullYear() +
+        "-" +
+        String(dt.getMonth() + 1).padStart(2, "0") +
+        "-" +
+        String(dt.getDate()).padStart(2, "0")
+      );
+    }
+
+    /** Jalons à partir de la date locale du jour civil. */
+    function dueDateToneClass(row) {
+      const iso = toInputDateValue(row);
+      if (!iso) return "";
+      const today = todayLocalISODate();
+      if (iso < today) return "item-date--overdue";
+      const urgentThrough = addCalendarDaysLocalISO(today, 7);
+      if (iso <= urgentThrough) return "item-date--urgent";
+      return "item-date--upcoming";
+    }
+
+    function dueDateDetailTitle(row) {
+      const iso = toInputDateValue(row) || "";
+      const tone = dueDateToneClass(row);
+      let t = "Échéance : " + (iso || "—");
+      if (tone === "item-date--overdue") t += " — en retard";
+      else if (tone === "item-date--urgent") t += " — dans les 7 prochains jours";
+      return t;
+    }
+
     async function loadHealth() {
       const pill = document.getElementById("health");
       const dot = document.getElementById("health-dot");
@@ -949,11 +1003,10 @@
           nameEl.textContent = it.name;
           nameEl.title = it.name;
           const dateEl = document.createElement("span");
-          dateEl.className = "item-date";
+          const tone = dueDateToneClass(it);
+          dateEl.className = tone ? "item-date " + tone : "item-date";
           dateEl.textContent = formatDueDateDisplay(it);
-          dateEl.title =
-            "Échéance : " +
-            (toInputDateValue(it) || "—");
+          dateEl.title = dueDateDetailTitle(it);
           const idEl = document.createElement("span");
           idEl.className = "item-id";
           idEl.textContent = "#" + it.id;
