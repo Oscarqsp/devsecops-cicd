@@ -597,6 +597,66 @@
       border-bottom: none;
     }
 
+    @keyframes item-enter-fade-move {
+      from {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes item-enter-fade-only {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .item.item-animate-in {
+        opacity: 0;
+        animation: item-enter-fade-move 0.34s cubic-bezier(0.2, 0.8, 0.25, 1) forwards;
+        animation-delay: var(--item-enter-delay, 0ms);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .item.item-animate-in {
+        opacity: 0;
+        animation: item-enter-fade-only 0.2s ease forwards;
+        animation-delay: var(--item-enter-delay, 0ms);
+      }
+    }
+
+    .item.item-exiting {
+      pointer-events: none;
+      animation: none !important;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .item.item-exiting {
+        opacity: 0;
+        transform: translateX(-12px);
+        transition:
+          opacity 0.24s ease,
+          transform 0.29s cubic-bezier(0.2, 0.8, 0.25, 1);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .item.item-exiting {
+        opacity: 0;
+        transition: opacity 0.16s ease;
+      }
+    }
+
     .item .item-main {
       display: flex;
       align-items: baseline;
@@ -1093,6 +1153,40 @@
 
     dbg("page load", { href: location.href, origin: location.origin });
 
+    const reducedMotionMq = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+    function prefersReducedMotion() {
+      return reducedMotionMq.matches;
+    }
+
+    /** Attend la transition de suppression (fallback si aucun évènement). */
+    function waitItemExitTransition(li, maxMs) {
+      if (!li) return Promise.resolve();
+      const cap = typeof maxMs === "number" ? maxMs : prefersReducedMotion() ? 220 : 400;
+      return new Promise((resolve) => {
+        let done = false;
+        function finish() {
+          if (done) return;
+          done = true;
+          clearTimeout(tid);
+          li.removeEventListener("transitionend", onEnd);
+          resolve();
+        }
+        function onEnd(ev) {
+          if (ev.target !== li) return;
+          finish();
+        }
+        const tid = setTimeout(finish, cap);
+        li.addEventListener("transitionend", onEnd);
+      });
+    }
+
+    async function runItemExit(li) {
+      if (!li) return;
+      li.classList.add("item-exiting");
+      await waitItemExitTransition(li);
+    }
+
     let lastItems = [];
     let editingId = null;
     let toastTimer = null;
@@ -1377,9 +1471,15 @@
         return;
       }
       const idNum = (x) => Number(x);
+      const motionReduce = prefersReducedMotion();
+      const staggerMs = motionReduce ? 22 : 40;
+      const staggerCap = motionReduce ? 160 : 300;
+      let i = 0;
       for (const it of filtered) {
         const li = document.createElement("li");
-        li.className = "item";
+        li.className = "item item-animate-in";
+        li.style.setProperty("--item-enter-delay", Math.min(i * staggerMs, staggerCap) + "ms");
+        i += 1;
         const rowId = idNum(it.id);
         const isEditing = editingId !== null && rowId === editingId;
 
@@ -1565,6 +1665,8 @@
           throw new Error("delete failed " + r.status);
         }
         dbg("delete OK, reloading items");
+        const row = btn.closest(".item");
+        await runItemExit(row);
         await loadItems();
         showToast("Tâche supprimée");
         dbg("delete flow done");
