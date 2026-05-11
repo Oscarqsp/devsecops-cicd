@@ -36,6 +36,8 @@ jobs:
     steps:
       - name: Récupération du code
         uses: actions/checkout@v4
+      - name: Créer le fichier .env pour les tests
+        run: echo "MISTRAL_API_KEY=test" > .env
       - name: Lancement de la stack Docker Compose
         run: docker compose up -d
       - name: Vérification des conteneurs
