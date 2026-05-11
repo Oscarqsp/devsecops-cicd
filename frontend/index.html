@@ -318,17 +318,23 @@
 
     button {
       font-family: inherit;
-      font-size: 0.875rem;
+      font-size: 0.8125rem;
       font-weight: 500;
-      padding: 0.55rem 1rem;
+      letter-spacing: -0.015em;
+      padding: 0.42rem 0.95rem;
       border: none;
       border-radius: 980px;
       cursor: pointer;
-      transition: background 0.15s ease, transform 0.08s ease;
+      transition:
+        background 0.18s ease,
+        border-color 0.18s ease,
+        transform 0.12s ease,
+        box-shadow 0.18s ease,
+        color 0.18s ease;
     }
 
     button:active {
-      transform: scale(0.98);
+      transform: scale(0.985);
     }
 
     button:focus:not(:focus-visible) {
@@ -367,10 +373,16 @@
     }
 
     .btn-primary {
-      background: var(--accent);
+      background: linear-gradient(180deg, #0a84ff 0%, var(--accent) 100%);
       color: #fff;
       flex-shrink: 0;
       align-self: flex-end;
+      font-weight: 600;
+      font-size: 0.8125rem;
+      letter-spacing: -0.02em;
+      box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.06),
+        0 1px 6px rgba(0, 113, 227, 0.22);
     }
 
     @media (min-width: 480px) {
@@ -385,11 +397,14 @@
     }
 
     .btn-primary:hover {
-      background: var(--accent-hover);
+      background: linear-gradient(180deg, #1c8fff 0%, var(--accent-hover) 100%);
+      box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.07),
+        0 2px 12px rgba(0, 113, 227, 0.3);
     }
 
     #add-form:invalid .form-actions .btn-primary {
-      background: #a8a8ad;
+      background: linear-gradient(180deg, #b9b9be 0%, #a8a8ad 100%);
       color: rgba(255, 255, 255, 0.94);
       cursor: not-allowed;
       box-shadow: none;
@@ -397,17 +412,21 @@
 
     #add-form:invalid .form-actions .btn-primary:hover,
     #add-form:invalid .form-actions .btn-primary:active {
-      background: #a8a8ad;
+      background: linear-gradient(180deg, #b9b9be 0%, #a8a8ad 100%);
       transform: none;
     }
 
     .btn-ghost {
-      background: rgba(0, 0, 0, 0.05);
+      background: rgba(255, 255, 255, 0.35);
       color: var(--text);
+      border: 1px solid rgba(0, 0, 0, 0.07);
+      font-weight: 500;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
     }
 
     .btn-ghost:hover {
-      background: rgba(0, 0, 0, 0.08);
+      background: rgba(255, 255, 255, 0.72);
+      border-color: rgba(0, 0, 0, 0.1);
     }
 
     .list-header {
@@ -609,26 +628,32 @@
     .btn-edit,
     .btn-delete,
     .btn-compact {
-      padding: 0.32rem 0.65rem;
+      padding: 0.3rem 0.62rem;
       font-size: 0.6875rem;
+      font-weight: 500;
+      letter-spacing: -0.012em;
     }
 
     .btn-edit {
       color: var(--accent);
-      background: rgba(0, 113, 227, 0.1);
+      background: rgba(0, 113, 227, 0.04);
+      border: 1px solid rgba(0, 113, 227, 0.18);
     }
 
     .btn-edit:hover {
-      background: rgba(0, 113, 227, 0.16);
+      background: rgba(0, 113, 227, 0.08);
+      border-color: rgba(0, 113, 227, 0.26);
     }
 
     .btn-delete {
       color: var(--danger);
-      background: rgba(255, 59, 48, 0.09);
+      background: rgba(255, 59, 48, 0.035);
+      border: 1px solid rgba(255, 59, 48, 0.22);
     }
 
     .btn-delete:hover {
-      background: rgba(255, 59, 48, 0.14);
+      background: rgba(255, 59, 48, 0.08);
+      border-color: rgba(255, 59, 48, 0.28);
     }
 
     .btn-delete:disabled,
@@ -782,18 +807,27 @@
       font-family: inherit;
       font-size: 0.8125rem;
       font-weight: 600;
-      padding: 0.5rem 0.9rem;
+      letter-spacing: -0.02em;
+      padding: 0.42rem 0.92rem;
       border: none;
       border-radius: 980px;
       cursor: pointer;
       color: #fff;
-      background: linear-gradient(180deg, #5e5ce6 0%, #4846c4 100%);
-      box-shadow: 0 2px 8px rgba(94, 92, 230, 0.35);
-      transition: filter 0.15s ease, transform 0.08s ease;
+      background: linear-gradient(180deg, #6361e8 0%, #574fd6 100%);
+      box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.05),
+        0 3px 10px rgba(94, 92, 230, 0.25);
+      transition:
+        filter 0.18s ease,
+        box-shadow 0.18s ease,
+        transform 0.12s ease;
     }
 
     .btn-ai:hover {
-      filter: brightness(1.06);
+      filter: brightness(1.04);
+      box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.06),
+        0 4px 14px rgba(94, 92, 230, 0.3);
     }
 
     .btn-ai:active {
