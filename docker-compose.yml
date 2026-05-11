@@ -21,8 +21,8 @@ services:
       - "3000:3000"
     environment:
       - DB_HOST=database
-      - DB_USER=${{ secrets.DB_USER }}
-      - DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+      - DB_USER=appuser
+      - DB_PASSWORD=apppassword
       - DB_NAME=devsecops_db
     depends_on:
       - database
@@ -32,10 +32,10 @@ services:
     image: mariadb:10.11
     container_name: database
     environment:
-      - MYSQL_ROOT_PASSWORD=${{ secrets.DB_PASSWORD }}
+      - MYSQL_ROOT_PASSWORD=rootpassword
       - MYSQL_DATABASE=devsecops_db
       - MYSQL_USER=appuser
-      - MYSQL_PASSWORD=${{ secrets.DB_PASSWORD }}
+      - MYSQL_PASSWORD=apppassword
     volumes:
       - db_data:/var/lib/mysql
     restart: unless-stopped
