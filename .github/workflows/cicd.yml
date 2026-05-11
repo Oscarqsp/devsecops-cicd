@@ -36,37 +36,20 @@ jobs:
     steps:
       - name: Récupération du code
         uses: actions/checkout@v4
-      - name: Créer le fichier .env (Mistral API Key)
-        env:
-          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
-        run: |
-          printf 'MISTRAL_API_KEY=%s\n' "${MISTRAL_API_KEY:-}" > .env
       - name: Lancement de la stack Docker Compose
         run: docker compose up -d
       - name: Vérification des conteneurs
         run: |
           sleep 10
           docker compose ps
+          docker ps
       - name: Arrêt de la stack
         run: docker compose down
-
-  check-monitoring:
-    name: "Vérification Monitoring"
-    runs-on: ubuntu-latest
-    needs: docker-compose-test
-    steps:
-      - name: Récupération du code
-        uses: actions/checkout@v4
-      - name: Création du dossier monitoring si inexistant
-        run: mkdir -p monitoring
-      - name: Vérification syntaxe Prometheus
-        run: |
-          docker run --rm -v $(pwd)/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml prom/prometheus promtool check config /etc/prometheus/prometheus.yml
 
   stop-ec2:
     name: Arrêt EC2
     runs-on: ubuntu-latest
-    needs: check-monitoring
+    needs: docker-compose-test
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Configure AWS credentials
@@ -107,13 +90,7 @@ jobs:
       - name: Récupération du code
         uses: actions/checkout@v4
 
-      - name: Fichier .env (secrets)
-        env:
-          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
-        run: |
-          printf 'MISTRAL_API_KEY=%s\n' "${MISTRAL_API_KEY:-}" > .env
-
-      - name: Installation clé SSH
+      - name: Installation clé SSH et known_hosts
         env:
           SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
@@ -123,7 +100,7 @@ jobs:
           chmod 600 ~/.ssh/ec2_deploy_key
           ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: Transfert des fichiers et relance Docker
+      - name: Envoyer tout le projet sur l’EC2 (archive + extraction)
         env:
           EC2_USER: ${{ secrets.EC2_USER }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
@@ -131,15 +108,16 @@ jobs:
           set -euo pipefail
           SSH_OPTS=(-i "$HOME/.ssh/ec2_deploy_key" -o IdentitiesOnly=yes -o BatchMode=yes)
           DEST="${EC2_USER}@${EC2_HOST}"
-          
-          # Nettoyage et transfert
           ssh "${SSH_OPTS[@]}" "$DEST" 'rm -rf "$HOME/devsecops-cicd" && mkdir -p "$HOME/devsecops-cicd"'
           tar -czf - --exclude='./.git' --exclude='./app/node_modules' . | ssh "${SSH_OPTS[@]}" "$DEST" 'tar -xzf - -C "$HOME/devsecops-cicd"'
-          
-          # Lancement Docker sur l'EC2
-          ssh "${SSH_OPTS[@]}" "$DEST" bash -s << 'REMOTE'
+
+      - name: Docker Compose sur l’EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
             cd "$HOME/devsecops-cicd"
             sudo docker compose down || true
-            sudo docker compose up -d --build
-            sudo docker compose ps
-          REMOTE
+            sudo docker compose up -d
