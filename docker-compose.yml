@@ -9,6 +9,8 @@ services:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - backend
+    networks:
+      - frontend_net
     restart: unless-stopped
 
   backend:
@@ -20,26 +22,27 @@ services:
     command: sh -c "npm install && node index.js"
     ports:
       - "3000:3000"
-#    env_file:
-#      - .env
     environment:
       - DB_HOST=database
       - DB_USER=appuser
-      - DB_PASSWORD=apppassword
+      - DB_PASSWORD=${DB_PASSWORD:-apppassword}
       - DB_NAME=devsecops_db
     depends_on:
       database:
         condition: service_healthy
+    networks:
+      - frontend_net
+      - backend_net
     restart: unless-stopped
 
   database:
     image: mariadb:10.11
     container_name: database
     environment:
-      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD:-rootpassword}
       - MYSQL_DATABASE=devsecops_db
       - MYSQL_USER=appuser
-      - MYSQL_PASSWORD=apppassword
+      - MYSQL_PASSWORD=${DB_PASSWORD:-apppassword}
     volumes:
       - db_data:/var/lib/mysql
     healthcheck:
@@ -48,6 +51,8 @@ services:
       timeout: 5s
       retries: 12
       start_period: 40s
+    networks:
+      - backend_net
     restart: unless-stopped
 
   portainer:
@@ -67,6 +72,9 @@ services:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
       - "9090:9090"
+    networks:
+      - frontend_net
+      - backend_net
     restart: unless-stopped
 
   cadvisor:
@@ -79,6 +87,8 @@ services:
       - /var/lib/docker/:/var/lib/docker:ro
     ports:
       - "8081:8080"
+    networks:
+      - backend_net
     restart: unless-stopped
 
   grafana:
@@ -88,52 +98,15 @@ services:
       - "3001:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=SecuProjet2026!
+    networks:
+      - frontend_net
     restart: unless-stopped
 
 volumes:
   db_data:
   portainer_data:
 
-services:
-  # Base de données sécurisée
-  db:
-    image: mariadb:10.11
-    container_name: mariadb_backend
-    restart: always
-    environment:
-      # Utilisation de variables (à définir dans un fichier .env plus tard)
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
-      MYSQL_DATABASE: crud_db
-      MYSQL_USER: user_app
-      MYSQL_PASSWORD: ${DB_PASSWORD}
-    networks:
-      - backend_net
-
-  # Votre application CRUD (que nous coderons à l'étape 2)
-  app:
-    build: ./app
-    container_name: crud_app
-    restart: always
-    depends_on:
-      - db
-    networks:
-      - backend_net
-      - frontend_net
-
-  # Frontend Nginx faisant office de Reverse Proxy
-  nginx:
-    image: nginx:alpine
-    container_name: nginx_frontend
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      - app
-    networks:
-      - frontend_net
-
 networks:
   frontend_net:
   backend_net:
-    internal: true # Réseau isolé pour la DB (Sécurité !)
+    internal: true # Sécurité : Isoler la DB
