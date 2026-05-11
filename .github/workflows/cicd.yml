@@ -126,16 +126,39 @@ jobs:
           chmod 600 ~/.ssh/ec2_deploy_key
           ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: Synchroniser tout le projet vers l’EC2 (rsync)
+      # Copie intégrale du workspace (app, frontend, nginx, monitoring, compose, .env, etc.)
+      # — tar + SSH : même contenu que le runner GitHub ; seuls .git et app/node_modules sont exclus.
+      - name: Envoyer tout le projet sur l’EC2 (archive + extraction)
         env:
           EC2_USER: ${{ secrets.EC2_USER }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
         run: |
-          rsync -avz --delete \
-            --exclude '.git/' \
-            --exclude 'app/node_modules/' \
-            -e "ssh -i $HOME/.ssh/ec2_deploy_key -o IdentitiesOnly=yes" \
-            ./ "${EC2_USER}@${EC2_HOST}:~/devsecops-cicd/"
+          set -euo pipefail
+          WS="${GITHUB_WORKSPACE:-$(pwd)}"
+          cd "$WS"
+          echo "=== Aperçu du dépôt à déployer ==="
+          ls -la
+          for d in app frontend nginx monitoring; do
+            if [ -d "$d" ]; then echo "--- $d ---"; ls -la "$d" | head -50; fi
+          done
+          SSH_OPTS=(-i "$HOME/.ssh/ec2_deploy_key" -o IdentitiesOnly=yes -o BatchMode=yes)
+          DEST="${EC2_USER}@${EC2_HOST}"
+          # Arrêt des conteneurs si une ancienne stack existe (sinon volumes bind peuvent bloquer)
+          ssh "${SSH_OPTS[@]}" "$DEST" bash -s <<'REMOTE'
+            set -euo pipefail
+            D="$HOME/devsecops-cicd"
+            C="$D/docker-compose.yml"
+            if [[ -f "$C" ]]; then
+              sudo docker compose --project-directory "$D" -f "$C" down || true
+            fi
+          REMOTE
+          ssh "${SSH_OPTS[@]}" "$DEST" 'rm -rf "$HOME/devsecops-cicd" && mkdir -p "$HOME/devsecops-cicd"'
+          tar -czf - \
+            --exclude='./.git' \
+            --exclude='./app/node_modules' \
+            . | ssh "${SSH_OPTS[@]}" "$DEST" 'tar -xzf - -C "$HOME/devsecops-cicd"'
+          echo "=== Fichiers sur l’instance après transfert ==="
+          ssh "${SSH_OPTS[@]}" "$DEST" 'ls -la "$HOME/devsecops-cicd"; ls -la "$HOME/devsecops-cicd/app" "$HOME/devsecops-cicd/frontend" "$HOME/devsecops-cicd/nginx" "$HOME/devsecops-cicd/monitoring"'
 
       - name: Docker Compose sur l’EC2
         uses: appleboy/ssh-action@master
@@ -144,14 +167,16 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            set -e
+            set -euo pipefail
+            DEPLOY_DIR="$HOME/devsecops-cicd"
+            COMPOSE_FILE="$DEPLOY_DIR/docker-compose.yml"
             if ! command -v docker &> /dev/null; then
               curl -fsSL https://get.docker.com | sudo sh
               sudo usermod -aG docker "$USER" || true
               sudo systemctl enable --now docker
             fi
-            cd ~/devsecops-cicd
-            sudo docker compose down || true
-            sudo docker compose pull || true
-            sudo docker compose up -d
-            sudo docker compose ps
+            test -f "$COMPOSE_FILE" || { echo "Fichier manquant: $COMPOSE_FILE"; exit 1; }
+            sudo docker compose --project-directory "$DEPLOY_DIR" -f "$COMPOSE_FILE" down || true
+            sudo docker compose --project-directory "$DEPLOY_DIR" -f "$COMPOSE_FILE" pull || true
+            sudo docker compose --project-directory "$DEPLOY_DIR" -f "$COMPOSE_FILE" up -d
+            sudo docker compose --project-directory "$DEPLOY_DIR" -f "$COMPOSE_FILE" ps
