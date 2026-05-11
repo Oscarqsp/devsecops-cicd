@@ -125,14 +125,49 @@
     .dash-body {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+      grid-template-rows: minmax(0, 1fr) auto;
+      align-items: stretch;
       gap: clamp(10px, 1.8vh, 14px);
       min-height: 0;
+    }
+
+    .panel-static-main {
+      grid-column: 1;
+      grid-row: 1;
+      min-height: 0;
+    }
+
+    .panel-ai {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      flex-shrink: 0;
+      border-color: rgba(94, 92, 230, 0.14);
+      background: linear-gradient(
+        165deg,
+        rgba(94, 92, 230, 0.07) 0%,
+        var(--surface) 46%
+      );
     }
 
     @media (max-width: 720px) {
       .dash-body {
         grid-template-columns: 1fr;
-        grid-template-rows: auto minmax(0, 1fr);
+        grid-template-rows: auto auto minmax(0, 1fr);
+      }
+
+      .panel-static-main {
+        grid-column: 1;
+        grid-row: 1;
+      }
+
+      .panel-ai {
+        grid-column: 1;
+        grid-row: 2;
+      }
+
+      .panel-list {
+        grid-column: 1;
+        grid-row: 3;
       }
     }
 
@@ -177,8 +212,11 @@
     }
 
     .panel-list {
+      grid-column: 2;
+      grid-row: 1;
       padding: 0;
       overflow: hidden;
+      min-height: 0;
     }
 
     .panel-label {
@@ -790,17 +828,59 @@
       vertical-align: middle;
     }
 
-    .ai-block {
-      margin-top: clamp(12px, 2vh, 16px);
-      padding-top: clamp(12px, 2vh, 16px);
-      border-top: 1px solid var(--stroke);
+    .panel-ai-inner {
+      padding: clamp(14px, 2vh, 18px);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
     }
 
-    .ai-row {
+    .panel-ai-toolbar {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 8px;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .panel-ai-intro {
+      flex: 1 1 220px;
+      min-width: 0;
+    }
+
+    .panel-ai-intro .panel-label {
+      margin-bottom: 0.3rem;
+      color: #4f4c96;
+      letter-spacing: 0.08em;
+    }
+
+    .panel-ai-lead {
+      margin: 0;
+      font-size: 0.8125rem;
+      color: var(--muted);
+      line-height: 1.42;
+      font-weight: 500;
+    }
+
+    .panel-ai-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      flex: 0 1 280px;
+    }
+
+    .panel-ai-actions .ai-status {
+      flex: 1 1 140px;
+      min-width: 0;
+      text-align: right;
+    }
+
+    .panel-ai .ai-rationale.panel-ai-rationale {
+      margin-top: 0;
+      padding-top: 11px;
+      border-top: 1px solid var(--stroke);
     }
 
     .btn-ai {
@@ -911,7 +991,7 @@
     </header>
 
     <div class="dash-body">
-      <section class="panel panel-static" aria-label="Synthèse et création">
+      <section class="panel panel-static panel-static-main" aria-label="Synthèse et création">
         <div class="panel-label">Synthèse</div>
         <div class="stat-row">
           <span class="big" id="item-count">0</span>
@@ -945,16 +1025,6 @@
             <button type="submit" class="btn-primary">Ajouter</button>
           </div>
         </form>
-        <div class="ai-block">
-          <div class="panel-label">IA · priorités</div>
-          <div class="ai-row">
-            <button type="button" class="btn-ai" id="btn-ai-reprioritize">
-              Réorganiser avec l’IA
-            </button>
-            <span class="ai-status" id="ai-status" aria-live="polite"></span>
-          </div>
-          <p class="ai-rationale" id="ai-rationale" hidden></p>
-        </div>
       </section>
 
       <section class="panel panel-list" id="list-panel" aria-label="Liste des tâches">
@@ -980,6 +1050,27 @@
         </div>
         <div class="list-scroll">
           <ul class="items" id="items-list"></ul>
+        </div>
+      </section>
+
+      <section class="panel panel-ai" id="ai-panel" aria-label="Intelligence artificielle">
+        <div class="panel-ai-inner">
+          <div class="panel-ai-toolbar">
+            <div class="panel-ai-intro">
+              <div class="panel-label">Assistant IA</div>
+              <p class="panel-ai-lead">
+                Proposition d’échéances via Mistral : les titres des tâches ne changent pas, seules les
+                dates peuvent être réajustées selon l’urgence estimée.
+              </p>
+            </div>
+            <div class="panel-ai-actions">
+              <button type="button" class="btn-ai" id="btn-ai-reprioritize">
+                Réorganiser avec l’IA
+              </button>
+              <span class="ai-status" id="ai-status" aria-live="polite"></span>
+            </div>
+          </div>
+          <p class="ai-rationale panel-ai-rationale" id="ai-rationale" hidden></p>
         </div>
       </section>
     </div>
