@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  # Monitoring des ressources matérielles des conteneurs (CPU, RAM)
+  - job_name: 'container_metrics'
+    static_configs:
+      - targets: ['cadvisor:8080']
+
+  # Monitoring de l'app CRUD
+  - job_name: 'node_app'
+    static_configs:
+      - targets: ['app:3000']
