@@ -20,8 +20,8 @@ services:
     command: sh -c "npm install && node index.js"
     ports:
       - "3000:3000"
-    env_file:
-      - .env
+#    env_file:
+#      - .env
     environment:
       - DB_HOST=database
       - DB_USER=appuser
