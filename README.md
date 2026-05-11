@@ -1,34 +1,40 @@
 # CI/CD DevSecOps - Automatisation & Sécurité
 
 ## Objectif
-Ce repo met en place un pipeline CI/CD sécurisé pour le projet DevSecOps.
-L'idée : à chaque fois qu'on pousse du code, le pipeline se déclenche automatiquement,
-scanne les vulnérabilités, et déploie l'application sur le serveur AWS si tout est ok.
 
-## Comment ça marche
-1. Un développeur push du code sur la branche `main`
-2. GitHub Actions déclenche automatiquement le pipeline
-3. Le pipeline scanne les dépendances Node.js (npm audit)
-4. Le pipeline scanne l'image Docker à la recherche de vulnérabilités (Trivy)
-5. Si tout est ok → déploiement automatique sur l'EC2 AWS en SSH
+Ce repo couvre la partie **Automatisation & Sécurité** du projet DevSecOps.
+Un pipeline CI/CD se déclenche automatiquement à chaque push sur `main`,
+scanne les vulnérabilités, gère le cycle de vie de l'instance EC2 et déploie
+la stack applicative sur AWS.
 
-## Sécurité des secrets
-Aucune IP, mot de passe ou clé SSH n'est écrit dans le code.
-Tout est stocké dans les GitHub Secrets (chiffrés et masqués) :
-- `EC2_HOST` : adresse du serveur
-- `EC2_USER` : utilisateur SSH
-- `EC2_SSH_KEY` : clé privée SSH ( en attente )
+## Pipeline — 5 jobs dans l'ordre
+
+1. **Tests de sécurité** — `npm audit` sur les dépendances Node.js + scan Trivy sur l'image Docker
+2. **Test Docker Compose** — démarrage de toute la stack en environnement isolé pour valider que les conteneurs fonctionnent
+3. **Arrêt EC2** — arrêt contrôlé de l'instance AWS via CLI
+4. **Démarrage EC2** — redémarrage propre de l'instance
+5. **Déploiement** — connexion SSH, suppression du code existant, clonage propre du repo, relance de la stack
+
+## Gestion des secrets
+
+Aucune donnée sensible n'est écrite dans le code.
+Tout est stocké dans les **GitHub Secrets** (chiffrés et masqués dans les logs) :
+
+| Secret | Rôle |
+|---|---|
+| `EC2_HOST` | Adresse IP du serveur |
+| `EC2_USER` | Utilisateur SSH |
+| `EC2_SSH_KEY` | Clé privée SSH |
+| `AWS_ACCESS_KEY_ID` | Credential AWS |
+| `AWS_SECRET_ACCESS_KEY` | Credential AWS |
+| `AWS_REGION` | Région AWS |
+| `INSTANCE_ID` | Identifiant de l'instance EC2 |
+| `MISTRAL_API_KEY` | Clé API Mistral |
 
 ## Stack utilisée
+
 - GitHub Actions (CI/CD)
-- Docker (conteneurisation)
-- Trivy (scan de vulnérabilités)
+- Trivy (scan de vulnérabilités Docker)
 - npm audit (scan des dépendances)
-- AWS EC2 (serveur de déploiement)
-
-## En attente
-- Clé SSH `.pem` → B/A EC2_SSH_KEY c'est ok 
-- Code source de l'app CRUD → E c'est en cours dokcer compose, il push son code bientot 
-
-test01
-  
+- AWS CLI (gestion EC2)
+- Docker Compose (orchestration des conteneurs)
