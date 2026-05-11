@@ -27,5 +27,5 @@ Tout est stocké dans les GitHub Secrets (chiffrés et masqués) :
 - AWS EC2 (serveur de déploiement)
 
 ## En attente
-- Clé SSH `.pem` → B/A EC2_SSH_KEY
-- Code source de l'app CRUD → E
+- Clé SSH `.pem` → B/A EC2_SSH_KEY c'est ok 
+- Code source de l'app CRUD → E c'est en cours 
