@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Liste des tâches</title>
+  <style>
+    :root {
+      --bg0: #e8eaf0;
+      --bg1: #f5f5f7;
+      --surface: rgba(255, 255, 255, 0.78);
+      --surface2: rgba(255, 255, 255, 0.92);
+      --stroke: rgba(0, 0, 0, 0.055);
+      --text: #1d1d1f;
+      --muted: #86868b;
+      --accent: #0071e3;
+      --accent-hover: #0077ed;
+      --danger: #ff3b30;
+      --ok: #34c759;
+      --radius-lg: 20px;
+      --radius: 12px;
+      --shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
+      --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+        "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      background: radial-gradient(1200px 800px at 10% -20%, #dde3ee 0%, transparent 55%),
+        radial-gradient(900px 600px at 110% 20%, #e8e8f0 0%, transparent 50%),
+        linear-gradient(180deg, var(--bg0) 0%, var(--bg1) 100%);
+    }
+
+    /* Plein écran, aucun scroll sur la page */
+    .dashboard {
+      height: 100dvh;
+      max-height: 100dvh;
+      padding: max(14px, env(safe-area-inset-top)) clamp(16px, 3vw, 28px)
+        max(14px, env(safe-area-inset-bottom));
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: clamp(10px, 1.8vh, 16px);
+      max-width: 1040px;
+      margin: 0 auto;
+    }
+
+    .dash-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .brand small {
+      font-size: 0.6875rem;
+      font-weight: 600;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .brand h1 {
+      font-size: clamp(1.25rem, 3vw, 1.65rem);
+      font-weight: 600;
+      letter-spacing: -0.028em;
+      line-height: 1.15;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .health-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.45rem 0.85rem;
+      border-radius: 999px;
+      background: var(--surface2);
+      border: 1px solid var(--stroke);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: var(--text);
+      flex-shrink: 0;
+    }
+
+    .health-pill .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--ok);
+      box-shadow: 0 0 0 3px rgba(52, 199, 89, 0.22);
+    }
+
+    .health-pill.bad .dot {
+      background: var(--danger);
+      box-shadow: 0 0 0 3px rgba(255, 59, 48, 0.2);
+    }
+
+    .dash-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+      gap: clamp(10px, 1.8vh, 14px);
+      min-height: 0;
+    }
+
+    @media (max-width: 720px) {
+      .dash-body {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto minmax(0, 1fr);
+      }
+    }
+
+    .panel {
+      background: var(--surface);
+      backdrop-filter: saturate(180%) blur(24px);
+      -webkit-backdrop-filter: saturate(180%) blur(24px);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .panel-static {
+      padding: clamp(14px, 2vh, 18px);
+      flex-shrink: 0;
+    }
+
+    .panel-list {
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .panel-label {
+      font-size: 0.6875rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.55rem;
+    }
+
+    .stat-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: clamp(12px, 2vh, 16px);
+    }
+
+    .stat-row .big {
+      font-size: clamp(2rem, 5vh, 2.75rem);
+      font-weight: 600;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-row .hint {
+      font-size: 0.8125rem;
+      color: var(--muted);
+      text-align: right;
+      line-height: 1.3;
+    }
+
+    .form {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    .form-fields {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    .form-fields .grow {
+      flex: 1;
+      min-width: min(100%, 140px);
+    }
+
+    .form input[type="date"] {
+      flex: 0 0 auto;
+      min-width: 132px;
+      padding: 0.55rem 0.8rem;
+      font-size: 0.9375rem;
+      border: 1px solid var(--stroke);
+      border-radius: 10px;
+      background: var(--surface2);
+      color: var(--text);
+      outline: none;
+      font-family: inherit;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .form input[type="date"]:focus {
+      border-color: rgba(0, 113, 227, 0.4);
+      box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.12);
+    }
+
+    .form .form-actions {
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .form input[type="text"] {
+      flex: 1;
+      min-width: 0;
+      padding: 0.55rem 0.8rem;
+      font-size: 0.9375rem;
+      border: 1px solid var(--stroke);
+      border-radius: 10px;
+      background: var(--surface2);
+      color: var(--text);
+      outline: none;
+      font-family: inherit;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .form input[type="text"]::placeholder {
+      color: #aeaeb2;
+    }
+
+    .form input[type="text"]:focus {
+      border-color: rgba(0, 113, 227, 0.4);
+      box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.12);
+    }
+
+    button {
+      font-family: inherit;
+      font-size: 0.875rem;
+      font-weight: 500;
+      padding: 0.55rem 1rem;
+      border: none;
+      border-radius: 980px;
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.08s ease;
+    }
+
+    button:active {
+      transform: scale(0.98);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      flex-shrink: 0;
+      align-self: flex-end;
+    }
+
+    @media (min-width: 480px) {
+      .form .form-actions {
+        justify-content: stretch;
+      }
+      .form .form-actions .btn-primary {
+        align-self: stretch;
+        width: 100%;
+        max-width: 160px;
+      }
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+    }
+
+    .btn-ghost {
+      background: rgba(0, 0, 0, 0.05);
+      color: var(--text);
+    }
+
+    .btn-ghost:hover {
+      background: rgba(0, 0, 0, 0.08);
+    }
+
+    .list-header {
+      padding: clamp(12px, 1.8vh, 14px) clamp(14px, 2vw, 18px) 8px;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .list-header h2 {
+      font-size: 0.6875rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .list-header .count {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Scroll uniquement pour la liste (le document ne bouge pas) */
+    .list-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 4px clamp(14px, 2vw, 18px) clamp(12px, 1.8vh, 16px);
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(0, 0, 0, 0.12) transparent;
+    }
+
+    .list-scroll::-webkit-scrollbar {
+      width: 5px;
+    }
+
+    .list-scroll::-webkit-scrollbar-thumb {
+      background: rgba(0, 0, 0, 0.12);
+      border-radius: 99px;
+    }
+
+    ul.items {
+      list-style: none;
+    }
+
+    .item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 0.55rem 0;
+      border-bottom: 1px solid var(--stroke);
+      font-size: 0.9375rem;
+    }
+
+    .item:last-child {
+      border-bottom: none;
+    }
+
+    .item .item-main {
+      display: flex;
+      align-items: baseline;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .item .item-name {
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: min(40vw, 220px);
+    }
+
+    @media (min-width: 720px) {
+      .item .item-name {
+        max-width: 200px;
+      }
+    }
+
+    .item .item-date {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--muted);
+      background: rgba(0, 0, 0, 0.045);
+      padding: 0.15rem 0.45rem;
+      border-radius: 6px;
+      flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .item .item-id {
+      color: var(--muted);
+      font-weight: 400;
+      font-size: 0.75rem;
+      flex-shrink: 0;
+    }
+
+    .item-actions {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 4px;
+      flex-shrink: 0;
+      align-items: center;
+    }
+
+    .btn-edit,
+    .btn-delete,
+    .btn-compact {
+      padding: 0.32rem 0.65rem;
+      font-size: 0.6875rem;
+    }
+
+    .btn-edit {
+      color: var(--accent);
+      background: rgba(0, 113, 227, 0.1);
+    }
+
+    .btn-edit:hover {
+      background: rgba(0, 113, 227, 0.16);
+    }
+
+    .btn-delete {
+      color: var(--danger);
+      background: rgba(255, 59, 48, 0.09);
+    }
+
+    .btn-delete:hover {
+      background: rgba(255, 59, 48, 0.14);
+    }
+
+    .btn-delete:disabled,
+    .btn-edit:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .item-edit-form {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .item-edit-form input[type="date"] {
+      flex: 0 0 auto;
+      min-width: 118px;
+      padding: 0.35rem 0.5rem;
+      font-size: 0.8125rem;
+      border: 1px solid var(--stroke);
+      border-radius: 8px;
+      background: var(--surface2);
+      font-family: inherit;
+      outline: none;
+    }
+
+    .item-edit-form input[type="date"]:focus {
+      border-color: rgba(0, 113, 227, 0.4);
+    }
+
+    .item-edit-form input[type="text"] {
+      flex: 1;
+      min-width: 100px;
+      max-width: 100%;
+      padding: 0.35rem 0.55rem;
+      font-size: 0.8125rem;
+      border: 1px solid var(--stroke);
+      border-radius: 8px;
+      background: var(--surface2);
+      font-family: inherit;
+      outline: none;
+    }
+
+    .item-edit-form input[type="text"]:focus {
+      border-color: rgba(0, 113, 227, 0.4);
+    }
+
+    .empty {
+      color: var(--muted);
+      font-size: 0.8125rem;
+      padding: 0.75rem 0;
+      text-align: center;
+    }
+
+    .ai-block {
+      margin-top: clamp(12px, 2vh, 16px);
+      padding-top: clamp(12px, 2vh, 16px);
+      border-top: 1px solid var(--stroke);
+    }
+
+    .ai-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-ai {
+      font-family: inherit;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      padding: 0.5rem 0.9rem;
+      border: none;
+      border-radius: 980px;
+      cursor: pointer;
+      color: #fff;
+      background: linear-gradient(180deg, #5e5ce6 0%, #4846c4 100%);
+      box-shadow: 0 2px 8px rgba(94, 92, 230, 0.35);
+      transition: filter 0.15s ease, transform 0.08s ease;
+    }
+
+    .btn-ai:hover {
+      filter: brightness(1.06);
+    }
+
+    .btn-ai:active {
+      transform: scale(0.98);
+    }
+
+    .btn-ai:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .ai-status {
+      font-size: 0.75rem;
+      color: var(--muted);
+      flex: 1;
+      min-width: 120px;
+    }
+
+    .ai-rationale {
+      margin-top: 8px;
+      font-size: 0.8125rem;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .ai-rationale[hidden] {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="dashboard">
+    <header class="dash-header">
+      <div class="brand">
+        <small>Tâches</small>
+        <h1>Todo</h1>
+      </div>
+      <div class="health-pill" id="health" aria-live="polite">
+        <span class="dot" id="health-dot" aria-hidden="true"></span>
+        <span id="health-text">État…</span>
+      </div>
+    </header>
+
+    <div class="dash-body">
+      <section class="panel panel-static" aria-label="Synthèse et création">
+        <div class="panel-label">Synthèse</div>
+        <div class="stat-row">
+          <span class="big" id="item-count">0</span>
+          <span class="hint">tâches<br />enregistrées</span>
+        </div>
+        <div class="panel-label">Nouvelle tâche</div>
+        <form class="form" id="add-form">
+          <div class="form-fields">
+            <input
+              class="grow"
+              type="text"
+              name="name"
+              id="name"
+              placeholder="Libellé"
+              autocomplete="off"
+              required
+            />
+            <input type="date" name="due_date" id="due_date" required aria-label="Échéance" />
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">Ajouter</button>
+          </div>
+        </form>
+        <div class="ai-block">
+          <div class="panel-label">IA · priorités</div>
+          <div class="ai-row">
+            <button type="button" class="btn-ai" id="btn-ai-reprioritize">
+              Réorganiser avec l’IA
+            </button>
+            <span class="ai-status" id="ai-status" aria-live="polite"></span>
+          </div>
+          <p class="ai-rationale" id="ai-rationale" hidden></p>
+        </div>
+      </section>
+
+      <section class="panel panel-list" aria-label="Liste des tâches">
+        <div class="list-header">
+          <h2>Tâches</h2>
+          <span class="count" id="list-count-note"></span>
+        </div>
+        <div class="list-scroll">
+          <ul class="items" id="items-list"></ul>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const api = (path) => "/api" + path;
+    const DBG = "[devsecops-ui]";
+    const dbg = (...args) => console.log(DBG, ...args);
+    const dbgErr = (...args) => console.error(DBG, ...args);
+
+    dbg("page load", { href: location.href, origin: location.origin });
+
+    let lastItems = [];
+    let editingId = null;
+
+    function setCounts(n) {
+      const el = document.getElementById("item-count");
+      const note = document.getElementById("list-count-note");
+      if (el) el.textContent = String(n);
+      if (note) note.textContent = n === 1 ? "1 tâche" : n + " tâches";
+    }
+
+    function todayLocalISODate() {
+      const n = new Date();
+      return (
+        n.getFullYear() +
+        "-" +
+        String(n.getMonth() + 1).padStart(2, "0") +
+        "-" +
+        String(n.getDate()).padStart(2, "0")
+      );
+    }
+
+    function toInputDateValue(row) {
+      const v = row.due_date;
+      if (v == null || v === "") return "";
+      if (typeof v === "string") {
+        const m = v.match(/^(\d{4}-\d{2}-\d{2})/);
+        return m ? m[1] : "";
+      }
+      if (v instanceof Date && !Number.isNaN(v.getTime())) {
+        return v.toISOString().slice(0, 10);
+      }
+      return "";
+    }
+
+    function formatDueDateDisplay(row) {
+      const iso = toInputDateValue(row);
+      if (!iso) return "—";
+      const [y, mo, d] = iso.split("-");
+      return d + "/" + mo + "/" + y;
+    }
+
+    async function loadHealth() {
+      const pill = document.getElementById("health");
+      const dot = document.getElementById("health-dot");
+      const text = document.getElementById("health-text");
+      try {
+        const r = await fetch(api("/health"), { cache: "no-store" });
+        const data = await r.json();
+        if (data.status === "ok") {
+          pill.classList.remove("bad");
+          text.textContent = "Opérationnel";
+        } else {
+          pill.classList.add("bad");
+          text.textContent = "Anomalie";
+        }
+      } catch {
+        pill.classList.add("bad");
+        text.textContent = "Hors ligne";
+      }
+    }
+
+    function renderItems(items) {
+      lastItems = items;
+      setCounts(items.length);
+      dbg("renderItems", {
+        count: items.length,
+        ids: items.map((it) => it.id),
+        editingId,
+        rawSample: items[0],
+      });
+      const ul = document.getElementById("items-list");
+      ul.innerHTML = "";
+      if (!items.length) {
+        editingId = null;
+        ul.innerHTML = '<li class="empty">Aucune tâche</li>';
+        return;
+      }
+      const idNum = (x) => Number(x);
+      for (const it of items) {
+        const li = document.createElement("li");
+        li.className = "item";
+        const rowId = idNum(it.id);
+        const isEditing = editingId !== null && rowId === editingId;
+
+        const main = document.createElement("div");
+        main.className = "item-main";
+
+        if (isEditing) {
+          const form = document.createElement("form");
+          form.className = "item-edit-form";
+          form.dataset.id = String(it.id);
+          const inp = document.createElement("input");
+          inp.type = "text";
+          inp.name = "name";
+          inp.value = it.name;
+          inp.autocomplete = "off";
+          inp.required = true;
+          inp.setAttribute("aria-label", "Libellé de la tâche");
+          const dateInp = document.createElement("input");
+          dateInp.type = "date";
+          dateInp.name = "due_date";
+          dateInp.required = true;
+          dateInp.value = toInputDateValue(it);
+          dateInp.setAttribute("aria-label", "Échéance");
+          const idHint = document.createElement("span");
+          idHint.className = "item-id";
+          idHint.textContent = "#" + it.id;
+          form.appendChild(inp);
+          form.appendChild(dateInp);
+          form.appendChild(idHint);
+          main.appendChild(form);
+        } else {
+          const nameEl = document.createElement("span");
+          nameEl.className = "item-name";
+          nameEl.textContent = it.name;
+          nameEl.title = it.name;
+          const dateEl = document.createElement("span");
+          dateEl.className = "item-date";
+          dateEl.textContent = formatDueDateDisplay(it);
+          dateEl.title =
+            "Échéance : " +
+            (toInputDateValue(it) || "—");
+          const idEl = document.createElement("span");
+          idEl.className = "item-id";
+          idEl.textContent = "#" + it.id;
+          main.appendChild(nameEl);
+          main.appendChild(dateEl);
+          main.appendChild(idEl);
+        }
+
+        const actions = document.createElement("div");
+        actions.className = "item-actions";
+
+        if (isEditing) {
+          const save = document.createElement("button");
+          save.type = "button";
+          save.className = "btn-primary btn-compact";
+          save.textContent = "OK";
+          const formEl = main.querySelector(".item-edit-form");
+          save.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            formEl.requestSubmit();
+          });
+          const cancel = document.createElement("button");
+          cancel.type = "button";
+          cancel.className = "btn-ghost btn-compact";
+          cancel.textContent = "Annuler";
+          cancel.dataset.action = "cancel-edit";
+          cancel.dataset.id = String(it.id);
+          actions.appendChild(save);
+          actions.appendChild(cancel);
+        } else {
+          const editBtn = document.createElement("button");
+          editBtn.type = "button";
+          editBtn.className = "btn-edit";
+          editBtn.textContent = "Éditer";
+          editBtn.dataset.action = "start-edit";
+          editBtn.dataset.id = String(it.id);
+          editBtn.setAttribute("aria-label", "Modifier " + it.name);
+          const del = document.createElement("button");
+          del.type = "button";
+          del.className = "btn-delete";
+          del.textContent = "Suppr.";
+          del.setAttribute("aria-label", "Supprimer " + it.name);
+          del.dataset.id = String(it.id);
+          actions.appendChild(editBtn);
+          actions.appendChild(del);
+        }
+
+        li.appendChild(main);
+        li.appendChild(actions);
+        ul.appendChild(li);
+      }
+
+      const formEditing = ul.querySelector(".item-edit-form");
+      if (formEditing) {
+        const input = formEditing.querySelector('input[name="name"]');
+        if (input) input.focus();
+      }
+    }
+
+    async function loadItems() {
+      const url = api("/items");
+      dbg("loadItems fetch", url);
+      try {
+        const r = await fetch(url, { cache: "no-store" });
+        const text = await r.text();
+        dbg("loadItems response", { status: r.status, ok: r.ok, bodyPreview: text.slice(0, 200) });
+        if (!r.ok) {
+          dbgErr("loadItems HTTP error", r.status, text);
+          throw new Error("items fetch failed: " + r.status);
+        }
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (parseErr) {
+          dbgErr("loadItems JSON parse error", parseErr, "text:", text);
+          throw parseErr;
+        }
+        const list = Array.isArray(data) ? data : [];
+        if (!Array.isArray(data)) dbgErr("loadItems: body is not an array", typeof data, data);
+        if (editingId !== null && !list.some((x) => Number(x.id) === editingId)) {
+          editingId = null;
+        }
+        renderItems(list);
+      } catch (err) {
+        dbgErr("loadItems failed", err);
+        setCounts(0);
+        document.getElementById("items-list").innerHTML =
+          '<li class="empty">Chargement impossible</li>';
+      }
+    }
+
+    document.getElementById("items-list").addEventListener("click", async (e) => {
+      const startEdit = e.target.closest("[data-action='start-edit']");
+      if (startEdit) {
+        const id = Number(startEdit.dataset.id);
+        if (Number.isFinite(id)) {
+          editingId = id;
+          renderItems(lastItems);
+        }
+        return;
+      }
+
+      const cancelEdit = e.target.closest("[data-action='cancel-edit']");
+      if (cancelEdit) {
+        editingId = null;
+        renderItems(lastItems);
+        return;
+      }
+
+      const btn = e.target.closest(".btn-delete");
+      dbg("list click", { target: e.target.tagName, closestDelete: !!btn });
+      if (!btn || btn.disabled) return;
+      const id = btn.dataset.id;
+      dbg("delete click", { id, dataset: { ...btn.dataset }, disabled: btn.disabled });
+      if (!id) return;
+      btn.disabled = true;
+      const delUrl = api("/items/" + encodeURIComponent(id));
+      try {
+        dbg("delete fetch start", delUrl);
+        const r = await fetch(delUrl, {
+          method: "DELETE",
+          cache: "no-store",
+        });
+        const delText = await r.text();
+        dbg("delete response", { status: r.status, ok: r.ok, body: delText.slice(0, 300) });
+        if (!r.ok) {
+          let errJson = null;
+          try {
+            errJson = delText ? JSON.parse(delText) : null;
+          } catch (_) {}
+          dbgErr("delete HTTP error", { status: r.status, errJson, delText });
+          throw new Error("delete failed " + r.status);
+        }
+        dbg("delete OK, reloading items");
+        await loadItems();
+        dbg("delete flow done");
+      } catch (err) {
+        dbgErr("delete catch", err);
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById("items-list").addEventListener("submit", async (e) => {
+      const form = e.target.closest(".item-edit-form");
+      if (!form) return;
+      e.preventDefault();
+      const id = form.dataset.id;
+      const input = form.querySelector('input[name="name"]');
+      const dateInp = form.querySelector('input[name="due_date"]');
+      const name = input ? input.value.trim() : "";
+      const due_date = dateInp ? dateInp.value.trim() : "";
+      if (!id || !name || !due_date) return;
+      const saveBtn = form.closest(".item")?.querySelector(".btn-primary.btn-compact");
+      if (saveBtn) saveBtn.disabled = true;
+      try {
+        const r = await fetch(api("/items/" + encodeURIComponent(id)), {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, due_date }),
+          cache: "no-store",
+        });
+        const text = await r.text();
+        dbg("patch response", { status: r.status, body: text.slice(0, 200) });
+        if (!r.ok) throw new Error("patch failed " + r.status);
+        editingId = null;
+        await loadItems();
+      } catch (err) {
+        dbgErr("patch error", err);
+        if (saveBtn) saveBtn.disabled = false;
+      }
+    });
+
+    document.getElementById("add-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const input = document.getElementById("name");
+      const dueEl = document.getElementById("due_date");
+      const name = input.value.trim();
+      const due_date = dueEl ? dueEl.value.trim() : "";
+      if (!name || !due_date) return;
+      try {
+        const postRes = await fetch(api("/items"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, due_date }),
+          cache: "no-store",
+        });
+        if (!postRes.ok) return;
+        input.value = "";
+        if (dueEl) dueEl.value = todayLocalISODate();
+        await loadItems();
+      } catch {
+        /* ignore */
+      }
+    });
+
+    document.getElementById("btn-ai-reprioritize").addEventListener("click", async () => {
+      const btn = document.getElementById("btn-ai-reprioritize");
+      const statusEl = document.getElementById("ai-status");
+      const ratEl = document.getElementById("ai-rationale");
+      if (!lastItems.length) {
+        statusEl.textContent = "Ajoutez au moins une tâche.";
+        return;
+      }
+      btn.disabled = true;
+      statusEl.textContent = "Analyse Mistral…";
+      ratEl.hidden = true;
+      ratEl.textContent = "";
+      try {
+        const r = await fetch(api("/items/reprioritize-ai"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reference_date: todayLocalISODate() }),
+          cache: "no-store",
+        });
+        const text = await r.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          throw new Error(text.slice(0, 120) || "Réponse invalide");
+        }
+        if (!r.ok) {
+          throw new Error(data.error || "Erreur " + r.status);
+        }
+        statusEl.textContent = data.updated
+          ? data.updated + " échéance(s) replanifiée(s)."
+          : "Terminé.";
+        if (data.rationale) {
+          ratEl.textContent = data.rationale;
+          ratEl.hidden = false;
+        }
+        editingId = null;
+        await loadItems();
+      } catch (err) {
+        statusEl.textContent = err.message || "Échec";
+        dbgErr("reprioritize-ai", err);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById("due_date").value = todayLocalISODate();
+    loadHealth();
+    loadItems();
+  </script>
+</body>
+</html>
