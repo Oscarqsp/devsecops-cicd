@@ -1,5 +1,6 @@
 const express = require('express');
 const mysql = require('mysql2/promise');
+const xss = require('xss');
 const { getApiKey, reprioritizeTasksWithMistral } = require('./mistral');
 const app = express();
 app.use(express.json());
@@ -130,17 +131,18 @@ app.post('/items', async (req, res) => {
     const { name, due_date: dueRaw } = req.body;
     const trimmed = typeof name === 'string' ? name.trim() : '';
     if (!trimmed) return res.status(400).json({ error: 'name required' });
+    const sanitized = xss(trimmed, { whiteList: {}, stripIgnoredTag: true });
     const dueDate = normalizeDueDate(dueRaw);
     if (!dueDate) return res.status(400).json({ error: 'due_date required (YYYY-MM-DD)' });
 
     const conn = await pool.getConnection();
     const [result] = await conn.query(
       'INSERT INTO items (name, due_date) VALUES (?, ?)',
-      [trimmed, dueDate]
+      [sanitized, dueDate]
     );
     conn.release();
 
-    res.status(201).json({ id: result.insertId, name: trimmed, due_date: dueDate });
+    res.status(201).json({ id: result.insertId, name: sanitized, due_date: dueDate });
   } catch (err) {
     console.error('[devsecops-api] Error creating item:', err);
     res.status(500).json({ error: err.message });
@@ -156,20 +158,21 @@ app.patch('/items/:id', async (req, res) => {
     const { name, due_date: dueRaw } = req.body;
     const trimmed = typeof name === 'string' ? name.trim() : '';
     if (!trimmed) return res.status(400).json({ error: 'name required' });
+    const sanitized = xss(trimmed, { whiteList: {}, stripIgnoredTag: true });
     const dueDate = normalizeDueDate(dueRaw);
     if (!dueDate) return res.status(400).json({ error: 'due_date required (YYYY-MM-DD)' });
 
     const conn = await pool.getConnection();
     const [result] = await conn.query(
       'UPDATE items SET name = ?, due_date = ? WHERE id = ?',
-      [trimmed, dueDate, id]
+      [sanitized, dueDate, id]
     );
     conn.release();
     log('PATCH affectedRows:', result.affectedRows, 'id:', id);
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'not found' });
     }
-    res.json({ id, name: trimmed, due_date: dueDate });
+    res.json({ id, name: sanitized, due_date: dueDate });
   } catch (err) {
     console.error('[devsecops-api] Error updating item:', err);
     res.status(500).json({ error: err.message });
