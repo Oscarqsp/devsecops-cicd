@@ -10,11 +10,9 @@ terraform {
     bucket  = "terraform-state-betsabee"
     key     = "devsecops/terraform.tfstate"
     region  = "eu-west-3"
-    profile = "project-devsecops"
   }
 }
 
 provider "aws" {
   region  = "eu-west-3"
-  profile = "project-devsecops"
 }
