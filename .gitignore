@@ -1,3 +1,15 @@
 app/node_modules
 .env
 dev.md
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+
+# Sensitive files
+*.pem
+*.key
+
+# Variables sensibles
+*.auto.tfvars
