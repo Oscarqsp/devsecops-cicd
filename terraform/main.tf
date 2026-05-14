@@ -28,7 +28,6 @@ resource "aws_subnet" "public" {
     Name = "subnet-public"
   }
 }
-
 resource "aws_subnet" "private" {
   vpc_id            = aws_vpc.devsecops.id
   cidr_block        = "10.0.2.0/24"
@@ -102,9 +101,9 @@ resource "aws_route_table_association" "private_assoc" {
   route_table_id = aws_route_table.private_rt.id
 }
 
-resource "aws_security_group" "devsecops" {
-  name        = "devsecops-security-group"
-  description = "Security group for Devsecops"
+resource "aws_security_group" "frontend" {
+  name        = "frontend-security-group"
+  description = "Security group for frontend Nginx"
   vpc_id      = aws_vpc.devsecops.id
 
   ingress {
@@ -140,22 +139,22 @@ resource "aws_security_group" "devsecops" {
   }
 
   tags = {
-    Name = "devsecops-security-group"
+    Name = "frontend-security-group"
   }
 }
 
 
 
-resource "aws_instance" "devsecops" {
+resource "aws_instance" "frontend" {
   ami                         = data.aws_ami.ubuntu.id
   instance_type               = "t2.micro"
   subnet_id                   = aws_subnet.public.id
-  vpc_security_group_ids      = [aws_security_group.devsecops.id]
+  vpc_security_group_ids      = [aws_security_group.frontend.id]
   key_name                    = var.key_name
   associate_public_ip_address = true
 
   tags = {
-    Name = "ec2-devsecops"
+    Name = "ec2-frontend"
   }
 }
 
