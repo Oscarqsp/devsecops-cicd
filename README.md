@@ -1,5 +1,7 @@
 # CI/CD DevSecOps - Automatisation & Sécurité
 
+site: http://15.224.88.202/
+
 ## Objectif
 
 Ce repo couvre la partie **Automatisation & Sécurité** du projet DevSecOps.
@@ -7,7 +9,7 @@ Un pipeline CI/CD se déclenche automatiquement à chaque push sur `main`,
 scanne les vulnérabilités, gère le cycle de vie de l'instance EC2 et déploie
 la stack applicative sur AWS.
 
-## Pipeline — 5 jobs dans l'ordre test
+## Pipeline — 5 jobs dans l'ordre
 
 1. **Tests de sécurité** — `npm audit` sur les dépendances Node.js + scan Trivy sur l'image Docker
 2. **Test Docker Compose** — démarrage de toute la stack en environnement isolé pour valider que les conteneurs fonctionnent
