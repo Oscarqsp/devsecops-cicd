@@ -40,3 +40,5 @@ Tout est stocké dans les **GitHub Secrets** (chiffrés et masqués dans les log
 - npm audit (scan des dépendances)
 - AWS CLI (gestion EC2)
 - Docker Compose (orchestration des conteneurs)
+
+test de MR
